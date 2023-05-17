@@ -1,0 +1,68 @@
+# Anonymized for submission to OID 2023
+# Basic Authentication Protocol
+###############################
+
+# import from stdOps: scrypt, pair, and destructors
+
+Sigma0:
+
+public t1/0 t2/0
+
+Sigma:
+
+public mac/2 ok/0 nonceErr/0 formatErr/0 fixedR/0
+private sk/1 fresh/0 spent/0 n/2 session/2 sfst/1 ssnd/1 s0/0 s1/0 s2/0 s3/0
+
+Algebra:
+
+sfst(session(x,y))->x
+ssnd(session(x,y))->y
+
+Cells:
+noncestate[x]:=fresh
+guardrail[N]:=s0
+
+Transaction InitSession:
+* x in {t1,t2}.
+S := guardrail[s0].
+if S=s0 then
+  new N.
+  guardrail[s0]:=s1.
+  noncestate[x]:=N.
+  send session(x,N).send N.nil
+else if S=s1 then
+  new N.
+  guardrail[s0]:=s2.
+  noncestate[x]:=N.
+  send session(x,N).send N.nil
+else nil
+
+Transaction Challenge:
+receive Session.
+receive N.
+try X=sfst(Session) in
+  S := guardrail[s0].
+  if S=s2 then
+    guardrail[s0]:=s3.
+    send scrypt(sk(X),N,fixedR).nil
+  else nil
+catch nil
+
+Transaction Response:
+receive Session.
+receive M.
+try X = sfst(Session) in
+N:=noncestate[X].
+S := guardrail[s0].
+if S=s3 then
+   try NN = dscrypt(sk(X),M)
+   in if N=NN
+      then new R.
+      	   noncestate[X]:=fresh.
+	   send scrypt(sk(X),ok,R). nil
+      else new R. send scrypt(sk(X),formatErr,R) . nil # nonce check failed
+   catch   new R. send scrypt(sk(X),formatErr,R) . nil # decryption failed
+else nil
+catch            nil  # not valid session (ignore)
+
+Bound: 4

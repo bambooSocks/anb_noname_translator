@@ -1,0 +1,92 @@
+# Anonymized for submission to OID 2023
+#########################################################
+# AF2: simplified Abadi Fournet, with a relation 'talk' #
+#########################################################
+
+# import from stdOps: crypt, inv, pk, pair, and destructors
+
+Sigma0:
+
+# modeling two honest agents a and b, and one dishonest i
+public a/0 b/0 i/0
+rel talk/2
+
+Sigma:
+
+private recipient/1
+
+gamma0:
+
+talk: (a,b),(a,i),(b,a)
+
+Algebra:
+# this is a private destructor, the intruder cannot do that!
+recipient(crypt(pk(B),M,R)) -> B
+
+Transaction ReceivePrivateKey:
+# The intruder can compromise the dishonest agent
+send inv(pk(i)). nil
+
+Transaction Initiator:
+
+* xA in {a,b}.
+* xB in {a,b,i}.
+if talk(xA,xB) then
+  if xB=i then
+    new NA,R. send crypt(pk(xB),pair(xA,NA),R).
+    # the recipient is dishonest, the intruder is allowed to know the actual
+    # names of the initiator and recipient, and that the initiator wants to talk
+    * talk(xA,xB) and xA=gamma(xA) and xB=gamma(xB). nil
+  else
+    new NA,R. send crypt(pk(xB),pair(xA,NA),R).
+    # both initiator and recipient are honest, and the initiator wants to talk
+    * talk(xA,xB) and xB in {a,b}. nil
+else
+  # the initiator does not want to talk
+  * not(talk(xA,xB)). nil
+
+Transaction Responder:
+
+* xB in {a,b}.
+receive M.
+try DEC = dcrypt(inv(pk(xB)),M) in
+  try A = proj1(DEC) in
+    if A=i then
+      if talk(xB,A) then
+        new NB,R. send crypt(pk(A),NB,R).
+        # the recipient is dishonest, the intruder is allowed to know the actual
+        # name of the responder, and that the responder wants to talk
+        * xB=gamma(xB) and talk(xB,A). nil
+      else
+        new NB. send NB.
+        # the responder does not want to talk to the intruder
+        * not(talk(xB,A)). nil
+    else if A in {a,b} then
+      if talk(xB,A) then
+        new NB,R. send crypt(pk(A),NB,R). nil
+      else new NB. send NB. nil
+    else new NB. send NB. nil
+  # the proj1 failed, so the message is encrypted but does not have the right
+  # format: send decoy
+  catch new NB. send NB. nil
+# the dcrypt failed, we send a decoy but also the intruder is allowed to know
+# that either this message ended up at the wrong responder or the recipient is
+# honest or the responder does not want to talk -- provided the message has the
+# right format:
+catch
+  try C = recipient(M) in # is it correctly encrypted for some agent C?
+    try DEC = dcrypt(inv(pk(C)),M) in
+      try A = proj1(DEC) in
+        # we can disregard the case that C is dishonest here, because the
+        # intruder could then already decrypt the message
+        if A in {a,b,i} and C in {a,b} then
+          new NB. send NB.
+          # either the message is for another responder, or the recipient is
+          # honest, or the responder does not want to talk
+          * not (C=xB and A=i and talk(xB,A)). nil
+        else new NB. send NB. nil
+      catch new NB. send NB. nil
+    catch new NB. send NB. nil
+  catch new NB. send NB. nil
+
+Bound: 3

@@ -1,0 +1,37 @@
+
+Sigma0:
+    Agent t1, t2, t3, server;
+
+Sigma:
+    Function h/2;
+    Number ok; # rename to 
+    private Function sk/1, extract/1;
+
+
+Algebra:
+    extract(h(sk(x),y)) -> x;
+
+Domains:
+    * x in {t1, t2, t3}
+
+Knowledge:
+    x: sk(x);
+    server: sk(x);
+
+Actions:
+    x: new N    // P_l, since x is selected needs to select first
+    x -> server: pair(N,h(sk(x),N)) // P_r for first transaction and P_l for second transaction
+    server -> x: ok  // P_r for second transaction ... is it also P_l for some other transaction?
+
+Bound: 4;
+
+
+# built in function:
+# pair
+
+# Functions must have arity more than 0
+# Sigma0 only has Agents or Numbers
+# Sigma has only Numbers or Functions
+# Agents can be defined on its own or in domain
+# Numbers and Agents do not define the arity
+# should Number type be turned into Message type?

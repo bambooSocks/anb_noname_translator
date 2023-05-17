@@ -1,0 +1,51 @@
+# Anonymized for submission to OID 2023
+########################################################################
+# AF0: simplified Abadi Fournet, everybody talks to everybody with     #
+# insufficient release of information in alpha (less than the protocol #
+# actually releases)                                                   #
+########################################################################
+
+# import from stdOps: crypt, inv, pk, pair, and destructors
+
+Sigma0:
+# modeling two honest agents a and b, and one dishonest i
+public a/0 b/0 i/0
+
+Transaction ReceivePrivateKey:
+# The intruder can compromise the dishonest agent
+send inv(pk(i)). nil
+
+Transaction Initiator:
+
+* xA in {a,b}.
+* xB in {a,b,i}.
+if xB=i then
+  new NA,R. send crypt(pk(xB),pair(xA,NA),R).
+  # the recipient is dishonest, the intruder is allowed to know the actual names
+  # of the initiator and recipient
+  * xA=gamma(xA) and xB=gamma(xB). nil
+else
+  new NA,R. send crypt(pk(xB),pair(xA,NA),R).
+  # both initiator and recipient are honest
+  * xB in {a,b}. nil
+
+Transaction Responder:
+
+* xB in {a,b}.
+receive M.
+try DEC = dcrypt(inv(pk(xB)),M) in
+  try A = proj1(DEC) in
+    if A=i then
+      new NB,R. send crypt(pk(A),NB,R).
+      # the recipient is dishonest, the intruder is allowed to know the actual
+      # name of the responder
+      * xB=gamma(xB). nil
+    else
+      new NB,R. send crypt(pk(A),NB,R). nil
+  # the proj1 failed, so the message is encrypted but does not have the right
+  # format: send decoy
+  catch new NB. send NB. nil
+# the dcrypt failed, so the message does not have the right format: send decoy
+catch new NB. send NB. nil
+
+Bound: 3

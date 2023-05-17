@@ -1,0 +1,38 @@
+
+Sigma0:
+    Agent x in {t1, t2, t3}, B;
+
+Sigma:
+    Function h/2;
+    Number ok, owned;
+    private Function sk/1, extract/1;
+
+Algebra:
+    extract(h(sk(x),y)) -> x;
+
+Cells:
+    status[x] := ok;
+
+Actions:
+    x: status[x] := owned
+    release: sk(x)
+    end     # could be inferred from release being r process and reading from cell is l process
+    if status[x] = ok then
+        x: new N
+        x -> B: pair(N,h(sk(x),N))
+    else end
+    B -> x: ok
+
+"
+Transaction corrupting:
+* x in {t1,t2,t3}.
+status[x]:=owned.		# For a compromised tag
+send sk(x).			# the intruder learns the shared secret
+nil
+"
+
+Bound: 4;
+
+
+# built in function:
+# pair

@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2023 Laouen Fernet
+# SPDX-FileCopyrightText: 2023 Sebastian Mödersheim
+# SPDX-FileCopyrightText: 2023 Technical University of Denmark
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+# Simple running example from the paper
+#######################################
+
+# relying on crypt, pk, inv, pair from stdOps
+
+Sigma0:
+
+public yes/0 no/0 a/0 b/0 c/0	# different constants for the privacy domains
+
+Transaction rcvPrivateKey:
+
+send inv(pk(a)).nil		# a compromised, so the intruder learns the private key of a
+
+Transaction server:
+
+* x in {a,b,c}.			# choose an agent
+* y in {yes,no}.		# flip a coin
+if y=yes		
+then new N1,N2. send crypt(pk(x),pair(yes,N1),N2).nil  # give a different kind of answer
+else new N2.    send crypt(pk(x),no,          N2).nil  # depending on coin flip.
+
+# Privacy Goal:
+
+# Classical unlinkability: the intruder should not be able to tell
+# more than every transaction is addressed to some agent x in {a,b,c}
+# and the choice y is in {yes,no}. This is even true when commenting
+# the rcvPrivateKey. Here rcvPrivateKey means that the intruder
+# obtains a's private key and can break security.
+
+# EXPECTED RESULT: violated
+Bound: 4
+

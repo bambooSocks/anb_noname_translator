@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2023 Laouen Fernet
+# SPDX-FileCopyrightText: 2023 Sebastian Mödersheim
+# SPDX-FileCopyrightText: 2023 Technical University of Denmark
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+# OSK (Ohkubo, Suzuki Kinoshita) from Cryptographic Approach to ``Privacy-Friendly'' Tags
+# RFID Privacy Workshop, MIT 2003.
+##################################
+
+Sigma0:
+
+public t1/0 t2/0 t3/0       # three tags
+
+Sigma:
+
+public g/2	 # a one-way function under which the state is transmitted
+       h/1	 # an successor function for the ratchet
+       ok/0	 # just a constant to signal "ok"
+
+private initr/1	   # initr(x) is the initial secret of the ratchet
+	extract/1  # and extract function like in Basic Hash
+
+Algebra:
+extract(g(Tag,Key)) -> Tag # this is a private extractor, the intruder cannot do that
+
+# This is similar to the extractor function in the Basic Hash example:
+# the reader has to make a guessing attack of sorts, which we do not
+# want to model, so we use this as a simple modeling tool.
+
+Cells:
+t[X] := initr(X)  # every tag X has a memory cell t[X] initialized with the secret initr(X)
+r[X] := initr(X)  # the reader has a memory cell r[X] for each tag X, also initialized initr(X)
+
+
+Transaction tag:
+
+* x in {t1,t2,t3}.	# pick one Tag acting
+State := t[x].		# look up state of ratchet
+t[x] := h(State).	# turn the ratchet
+send g(x,State).	# send the ratchet value before the turn to the server (with name x)
+nil
+
+Transaction reader:
+
+receive X.		 # receive a g(x,State) value
+try Tag = extract(X) in  # make a guessing attack which Tag it is
+State := r[Tag].     	 # look up the ratchet for that Tag
+if X=g(Tag,State) then   # accept only if the keys match - no desynch allowed
+  r[Tag] := h(State).	 # update the ratchet on server side
+  send ok. nil		 # success
+else nil catch nil	 # all other cases fail
+
+# Standard Unlinkability Goal
+# Like in the other examples, the goal is that the intruder learns nothing more that it's tags acting.
+#
+# Here we have a violation: consider a trace of tag . tag. reader
+# Say the privacy variables are called x1 and x2.
+#
+# If the intruder sends in the reader transaction the second message
+# then the server accepts this iff x1/=x2, because in case x1=x2 the
+# states are desynchronized. Since the intruder can observe whether
+# "ok" is sent or not, they can observe whether x1=x2 or not.
+
+# EXPECTED RESULT: violated
+
+Bound: 3

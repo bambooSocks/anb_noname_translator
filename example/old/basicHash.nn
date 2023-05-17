@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: 2023 Laouen Fernet
+# SPDX-FileCopyrightText: 2023 Sebastian Mödersheim
+# SPDX-FileCopyrightText: 2023 Technical University of Denmark
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+# Basic Hash protocol
+# From Weis et al.: Security and Privacy Aspects of Low-Cost Radio Frequency Identification Systems.
+#      SPC 2003
+
+# importing from stdOps: pair,proj1,proj2
+
+Sigma0:
+
+public t1/0 t2/0 t3/0	# Three tags
+
+Sigma:
+
+public h/2		# MAC function 
+       ok/0		# constant to signal success
+
+private sk/1		# sk(x) shared key between Tag x and the Reader
+	extract/1	# see below
+
+Algebra:
+
+extract(h(sk(x),y)) -> x	# Note that this is a private destructor - the intruder cannot do this!
+
+# What we model here: when the reader receives a message
+# pair(N,h(sk(x),N)) then it cannot directly see who is x -- the whole
+# point is that the identity is not directly communicated. The reader
+# instead performs a guessing attack: check for every known tag x
+# whether h(sk(x),N) gives the observed hash value; this reveals the
+# true value of x to the reader.  Note that the intruder could do such
+# a guessing attack if it knew sk(t1), sk(t2), ... etc.
+#
+# To model the guessing attack for the honest card reader without
+# modeling a loop, we have used here a private destructor that only
+# the card reader can use to obtain the name of the tag, i.e., the
+# result of the guessing attack. Then it can check that the hash value
+# checks out with the received nonce.
+
+Transaction tag:
+* x in {t1,t2,t3}.
+new N. send pair(N,h(sk(x),N)). nil
+
+Transaction reader:
+receive M.
+try N = proj1(M) in
+try H = proj2(M) in
+try X = extract(H) in		# "Guessing attack" to find the sender Tag
+if H=h(sk(X),N)			# does everything check out?
+then send ok. nil		# yes: send ok
+else          nil		# in all other cases we do nothing
+catch nil catch nil catch nil 
+
+# Privacy goals: 
+# Note there are no alpha-releases besides the domain constraint * x in {t1,t2,t3}
+
+# That means in any number of transactions, the intruder should not
+# learn anything more about the tags than that they are tags, thus not
+# their names or whether two particular actions have been performed by
+# the same tag. Trivial consequences such as "four transactions cannot
+# be performed by four distinct tags" (since there are only three) do
+# not count as a privacy violation, since they already following from
+# the released information.
+
+## EXPECTED RESULT: no violation
+Bound: 4 ## checked for 4 transactions

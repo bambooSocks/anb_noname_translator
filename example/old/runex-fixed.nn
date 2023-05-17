@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: 2023 Laouen Fernet
+# SPDX-FileCopyrightText: 2023 Sebastian Mödersheim
+# SPDX-FileCopyrightText: 2023 Technical University of Denmark
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+# Simple running example from the paper
+#######################################
+
+# relying on crypt, pk, inv, pair from stdOps
+
+Sigma0:
+
+public yes/0 no/0 a/0 b/0 c/0	# different constants for the privacy domains
+
+Transaction rcvPrivateKey:
+
+send inv(pk(a)).nil		# a compromised, so the intruder learns the private key of a
+
+Transaction server:
+
+* x in {a,b,c}.			# choose an agent
+* y in {yes,no}.		# flip a coin
+
+if x=a then			# special case for the compromised agent: in this case we release
+   				# the values of x and y
+  if y=yes
+  then new N1,N2. * x=a and y=yes. send crypt(pk(x),pair(yes,N1),N2).nil   # (*1)
+  else new N2.    * x=a and y=no.  send crypt(pk(x),no,          N2).nil   # (*1)
+else   	   	    	        
+if y=yes			# also in the honest case the intruder knows that the
+   				# addressed x is not a:
+then new N1,N2. * not x=a. send crypt(pk(x),pair(yes,N1),N2).nil   # (*2)
+else new N2.    * not x=a. send crypt(pk(x),no,          N2).nil   # (*2)
+
+# Privacy Goal:
+
+# A softened unlinkability goal (compare to runex.nn): we accept that,
+# since a is compromised, whenever x=a, the intruder of course learns
+# that fact and as well as the value of y, so this is released (*1).
+#
+# This is still not enough (compare to runex-fix-attempt): in case
+# x/=a, the intruder still finds that out, because they can observe
+# that the message does not decipher with the private key of a. (They
+# do not find out the value of y though.) Thus releasing in the x/=a
+# case that this holds is sufficient and no further privacy violations
+# occur.
+
+# EXPECTED RESULT: no violation
+Bound: 3
+
