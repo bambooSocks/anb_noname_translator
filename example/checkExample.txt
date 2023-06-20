@@ -1,0 +1,115 @@
+Input:
+[
+    Local "A" (LNew ["N1", "N2"]),
+    Comm "A" "B" (Comp "pair" [Comp "pair" [Atom "N1", Atom "N2"], Comp "h" [Atom "N1", Atom "N2"]])
+]
+
+In AnnB:
+
+A: new N1, N2
+A->B: pair(pair(N1,N2),h(N1,N2))
+
+Output:
+[
+    [
+        PNew "A" ["N1","N2"],
+        PSend "A" (Comp "pair" [Comp "pair" [Atom "N1",Atom "N2"],Comp "h" [Atom "N1",Atom "N2"]])
+    ],[
+        PReceive "B" "X" (Comp "pair" [Comp "pair" [Atom "N1",Atom "N2"],Comp "h" [Atom "N1",Atom "N2"]]),
+        PTry "B" ("x3",RComp "proj1" [RAtom "x2"]) [
+            PTry "B" ("x4",RComp "proj2" [RAtom "x2"]) [
+                PTry "B" ("x5",RComp "proj1" [RAtom "x3"]) [
+                    PTry "B" ("x6",RComp "proj2" [RAtom "x3"]) [
+                        PCheckIf "B" ("x4",RComp "h" [RAtom "x5",RAtom "x6"]) [
+
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+]
+
+In NN:
+
+Transaction T1:
+    new(N1,N2).
+    send(pair(pair(N1,N2),h(N1,N2))).
+    nil
+
+Transaction T2:
+    receive(X2).
+    try X3 = proj1(X2) in
+        try X4 = proj2(X2) in
+            try X5 = proj1(X3) in
+                try X6 = proj2(X3) in
+                    if X4 = h(X5,X6) then
+                        nil
+                    else nil
+                catch nil
+            catch nil
+        catch nil
+    catch nil
+
+
+What did I manage:
+ - generate actual NN transactions code
+ - checking structure
+ - fix receive labels
+ - 
+
+What to do:
+ - delayed checking
+ - consolidate if processes
+ - go through err messages
+ - merge registers
+ - if statements
+
+
+
+session ids
+
+Sigma:
+    h/1
+
+A: new N1
+A->B: N1
+B: new N2
+B->A: h(N2)
+
+
+Cells:
+  sessionTransaction[s] := T1
+  rcvX2[s] := 0
+  rcvX4[s] := 0
+
+Transaction T1:
+  new(S).
+  new(N1).
+  sessionTransaction[S] := T2.
+  send(S).
+  send(N1).
+  nil
+
+Transaction T2:
+  receive(S).
+  receive(X2).
+  T := sessionTransaction[S].
+  if T = T1 then
+    rcvX2[S] := X2. // there would be try checking here
+    new(N2).
+    sessionTransaction[S] := T3.
+    send(S).
+    send(h(N2)).
+    nil
+  else nil
+
+Transaction T3:
+  receive(S).
+  receive(X4).
+  T := sessionTransaction[S].
+  if T = T1 then
+    rcvX4[S] := X4.
+    sessionTransaction[S] := T4.
+    nil
+  else nil
