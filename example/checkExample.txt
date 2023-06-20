@@ -53,17 +53,20 @@ Transaction T2:
 
 
 What did I manage:
- - generate actual NN transactions code
- - checking structure
- - fix receive labels
- - 
+ - go through err messages
+ - created the structure around the delayed checking
+ - restructured the code so that processes contain only the needed information and represent NN
+ - actions and agent actions are used for analysis (from check to convert) 
 
 What to do:
+ - fix double checking of the struct
  - delayed checking
- - consolidate if processes
- - go through err messages
- - merge registers
+    - example
+    - retrieve old message 
  - if statements
+
+ - merge registers
+ - consolidate if processes
 
 
 

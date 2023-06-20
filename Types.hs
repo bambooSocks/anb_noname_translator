@@ -61,15 +61,16 @@ data Formula
 --   | LRelease Mode Formula
 --   deriving (Show)
 
-data Action
+data AgentAction
   = ASend Agent Msg
-  | AReceive Agent Label Msg Label
-  | AIf Agent Formula [Action] [Action]
-  | ANew [String]
-  | APickDomain Msg [Msg]
-  | ARead Label Cell Msg
-  | AWrite Cell Msg Msg
-  | ARelease Mode Formula
+  | AReceive Agent Msg Label
+  | AIf Agent Formula [AgentAction] [AgentAction]
+  | ANew Agent [String]
+  | APickDomain Agent Msg [Msg]
+  | ARead Agent Label Cell Msg
+  | AWrite Agent Cell Msg Msg
+  | ARelease Agent Mode Formula
+  | ANil
   deriving (Show)
 
 data Mode
@@ -78,16 +79,16 @@ data Mode
   deriving (Show)
 
 data NNProcess
-  = PSend Agent Msg -- send(msg)
-  | PReceive Agent Label Msg -- receive(label)
-  | PTry Agent CheckInfo [NNProcess] -- try check in processes catch nil
-  | PCheckIf Agent CheckInfo [NNProcess] -- if check then processes else nil -- TODO: maybe remove later
-  | PIf Agent Formula [NNProcess] -- if formula then processes else nil
-  | PNew Agent [String] -- new s1,s2
-  | PPickDomain Agent Msg [Msg] -- * m in {m1, m2, m3, ...}
-  | PRead Agent Label Cell Msg -- label := cell[msg]
-  | PWrite Agent Cell Msg Msg -- cell[msg] := msg
-  | PRelease Agent Mode Formula -- */<> formula
+  = PSend Msg -- send(msg)
+  | PReceive Label -- receive(label)
+  | PTry CheckInfo [NNProcess] -- try check in processes catch nil
+  | PCheckIf CheckInfo [NNProcess] -- if check then processes else nil -- TODO: maybe remove later
+  | PIf Formula [NNProcess] -- if formula then processes else nil
+  | PNew [String] -- new s1,s2
+  | PPickDomain Msg [Msg] -- * m in {m1, m2, m3, ...}
+  | PRead Label Cell Msg -- label := cell[msg]
+  | PWrite Cell Msg Msg -- cell[msg] := msg
+  | PRelease Mode Formula -- */<> formula
   | PNil
   deriving (Show)
 

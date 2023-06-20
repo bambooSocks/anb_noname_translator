@@ -214,7 +214,7 @@ decompose agent msg@(Comp "inv" (pk:[])) label = do
   cond <- canDeduceFromFrame agent pk
   if cond then do
     register agent msg Done label
-    label2 <- getLabel agent pk "Could not find label" -- TODO: fix errMsg
+    label2 <- getLabel agent pk "Could not find label for public key"
     return ([CTry (label2, RComp "pubk" [RAtom label])])
   else do
     register agent msg Done label
