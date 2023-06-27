@@ -1,163 +1,114 @@
 module Verification where
 
-import Data.Foldable (for_, find)
-import qualified Control.Monad.Trans.State as ST
-import qualified Data.Map as M
 import Types (Msg(Atom, Comp), 
-          Agent, Label,
+          Agent, Label, NNCell,
           Check(CTry, CIf), 
           Recipe(RAtom, RComp),
-          unableErrorMsg)
+          Marking(ToDo, Done), Frame)
+import Data.Foldable (find)
+import qualified Data.Map as M
+import qualified Helper as H
+import qualified State as S
 
-data Marking
-  = ToDo
-  | Done
-  deriving (Show, Eq)
-
-type Frame = M.Map Label (Msg, Marking)
-type AgentFrames = M.Map Agent Frame
-
-data State = State
-  { counter           :: Int
-  , frames            :: AgentFrames
-  , pubFunc           :: [String]
-  , customDestructors :: [(Msg, Msg)]
-  }
-  deriving (Show)
-
-initialState :: State
-initialState = State 
-  { counter           = 0
-  , frames            = M.empty
-  , pubFunc           = ["pair", "crypt", "scrypt", "sign"]
-  , customDestructors = []
-  }
-
-type MState = ST.StateT State []
-
-get :: MState State
--- fetch the current state
-get = ST.get
-
-put :: State -> MState ()
--- update the state with new version
-put = ST.put
-
-runMState :: MState a -> State -> [(a, State)]
--- apply the state transformer on an state and return the final state and value
-runMState = ST.runStateT
-
-evalMState :: MState a -> State -> [a]
--- apply the state transformer on an state and return the final value
-evalMState = ST.evalStateT
-
-execMState :: MState a -> State -> [State]
--- apply the state transformer on an state and return the final state
-execMState = ST.execStateT
-
-freshLabel :: MState Label
+freshLabel :: S.MState Label
 -- generate a fresh label
 freshLabel = do
-  state <- get
-  let i = counter state
+  state <- S.get
+  let i = S.counter state
   let label = "X" ++ show i
-  put state { counter = i + 1 }
+  S.put state { S.counter = i + 1 }
   return label
 
 --TODO: merge register and registerFresh to check the frame if it is in frame then just 
 --      update the msg and marking otherwise create new label
 
-register :: Agent -> Msg -> Marking -> Label -> MState ()
+register :: Agent -> Msg -> Marking -> Label -> S.MState ()
 -- register a new label and corresponding message in the frame
 register agent msg marking label = do
   frame <- getFrameForAgent agent
   let newFrame = M.insert label (msg, marking) frame
   putFrameForAgent agent newFrame
 
-registerFresh :: Agent -> Msg -> Marking -> MState Label
+registerFresh :: Agent -> Msg -> Marking -> S.MState Label
 -- generate a new label and register message with given marking
 registerFresh agent msg marking = do
   label <- freshLabel
   register agent msg marking label
   return label
 
-getFrameForAgent :: Agent -> MState Frame
+getFrameForAgent :: Agent -> S.MState Frame
 -- helper to get a frame for a given agent
 getFrameForAgent agent = do
-  state <- get
-  let afs = (frames state)
+  state <- S.get
+  let afs = (S.frames state)
   return (M.findWithDefault M.empty agent afs)
 
-putFrameForAgent :: Agent -> Frame -> MState ()
+putFrameForAgent :: Agent -> Frame -> S.MState ()
 -- helper to update a frame for a given agent
 putFrameForAgent agent frame = do
-  state <- get
-  let afs = (frames state)
-  put state { frames = M.insert agent frame afs }
+  state <- S.get
+  let afs = (S.frames state)
+  S.put state { S.frames = M.insert agent frame afs }
 
-isInAgentsFrame :: Agent -> Msg -> MState Bool
+isInAgentsFrame :: Agent -> Msg -> S.MState Bool
 -- checks whether the message is in agent's frame
 isInAgentsFrame agent msg = do
   frame <- getFrameForAgent agent
   let msgs = M.map fst frame
   return (any (msg ==) msgs)
 
-initAgentsFrame :: Agent -> [Msg] -> MState ()
+initAgentsFrame :: Agent -> [Msg] -> S.MState ()
 initAgentsFrame agent [] = do
   return ()
 initAgentsFrame agent (msg:msgs) = do
   registerFresh agent msg ToDo -- not sure if we want it Done or ToDo (if it is Atoms only easier to set to Done)
   initAgentsFrame agent msgs
 
-getLabel :: Agent -> Msg -> String -> MState Label
-getLabel agent msg errMsg = do
+tryGetLabel :: Agent -> Msg -> S.MState (Maybe Label)
+tryGetLabel agent msg = do
   frame <- getFrameForAgent agent
   let res = find (\ (_,(m,_)) -> m == msg) (M.toList frame)
   case res of
-    Just (label,_) -> do return label
-    Nothing -> error errMsg
+    Just (label,_) -> return (Just label)
+    Nothing -> return Nothing
 
-getRecipe :: Agent -> Msg -> MState Recipe
-getRecipe agent msg@(Atom x) = do
-  label <- getLabel agent msg (unableErrorMsg msg)
-  return (RAtom label)
-getRecipe agent msg@(Comp id args) = do
+tryGetRecipe :: Agent -> Msg -> S.MState (Maybe Recipe)
+tryGetRecipe agent msg@(Atom x) = do
+  label <- tryGetLabel agent msg
+  case label of
+    Just l -> return (Just (RAtom l))
+    Nothing -> return Nothing
+tryGetRecipe agent msg@(Comp id args) = do
   isInFrame <- isInAgentsFrame agent msg
   if isInFrame then do
-    label <- getLabel agent msg "Failed to find message in the agent's frame"
-    return (RAtom label)
+    label <- tryGetLabel agent msg
+    case label of
+      Just l -> return (Just (RAtom l))
+      Nothing -> return Nothing
   else do
-    idAllowed <- isPublicFunction id
-    allArgsCanBeDeduced <- canDeduceManyFromFrame agent args
-    if (idAllowed && allArgsCanBeDeduced) then do
-      convertedArgs <- getRecipes agent args
-      return (RComp id convertedArgs)
-    else error (unableErrorMsg msg) 
+    idAllowed <- S.isPublicFunction id (length args)
+    convertedArgs <- tryGetRecipes agent args
+    if (idAllowed && (all (Nothing /=) convertedArgs)) then do
+      let recipes = H.extractRecipes convertedArgs
+      return (Just (RComp id recipes))
+    else return Nothing
 
-getRecipes :: Agent -> [Msg] -> MState [Recipe]
-getRecipes agent [] = do
+tryGetRecipes :: Agent -> [Msg] -> S.MState [(Maybe Recipe)]
+tryGetRecipes agent [] = do
   return []
-getRecipes agent (msg:msgs) = do
-  r <- getRecipe agent msg
-  rs <- getRecipes agent msgs
+tryGetRecipes agent (msg:msgs) = do
+  r <- tryGetRecipe agent msg
+  rs <- tryGetRecipes agent msgs
   return (r:rs)
 
-isToDo :: Agent -> Label -> MState Bool
-isToDo agent label = do
-  frame <- getFrameForAgent agent
-  let res = M.lookup label frame
-  case res of
-    Just (_,m) -> return (m == ToDo)
-    Nothing -> error "Couldn't find a label"
-
-decomposeToDo :: Agent -> MState [Check]
+decomposeToDo :: Agent -> S.MState [Check]
 -- try to decomposes all messages in frame that are marked ToDo
 decomposeToDo agent = do
   frame <- getFrameForAgent agent
   let msgsToDecompose = M.filter (\(_, mark) -> mark == ToDo) frame
   decomposeFrame agent (M.toList msgsToDecompose)
 
-decomposeFrame :: Agent -> [(Label,(Msg,Marking))] -> MState [Check]
+decomposeFrame :: Agent -> [(Label,(Msg,Marking))] -> S.MState [Check]
 decomposeFrame agent [] = do
   return []
 decomposeFrame agent ((label,(msg,_)):rest) = do
@@ -165,7 +116,7 @@ decomposeFrame agent ((label,(msg,_)):rest) = do
   chs <- decomposeFrame agent rest
   return (ch ++ chs)
 
-decompose :: Agent -> Msg -> Label -> MState [Check]
+decompose :: Agent -> Msg -> Label -> S.MState [Check]
 decompose agent msg@(Atom _) label = do
   register agent msg Done label
   return []
@@ -182,7 +133,8 @@ decompose agent msg@(Comp "scrypt" (sk:dm:[])) label = do
   if cond then do
     register agent msg Done label
     label2 <- registerFresh agent dm ToDo
-    skRecipe <- getRecipe agent sk
+    maybeSkRecipe <- tryGetRecipe agent sk
+    let skRecipe = H.extractRecipe maybeSkRecipe
     chs <- decomposeToDo agent
     return ([CTry (label2, RComp "dscrypt" [skRecipe, RAtom label])] ++ chs)
   else
@@ -193,7 +145,8 @@ decompose agent msg@(Comp "crypt" (pk:dm:[])) label = do
   if cond then do
     register agent msg Done label
     label2 <- registerFresh agent dm ToDo
-    invPkRecipe <- getRecipe agent (Comp "inv" [pk])
+    maybeInvPkRecipe <- tryGetRecipe agent (Comp "inv" [pk])
+    let invPkRecipe = H.extractRecipe maybeInvPkRecipe
     chs <- decomposeToDo agent
     return ([CTry (label2, RComp "dcrypt" [invPkRecipe, RAtom label])] ++ chs)
   else
@@ -204,7 +157,8 @@ decompose agent msg@(Comp "sign" ((Comp "inv" (pk:[])):dm:[])) label = do
   if cond then do
     register agent msg Done label
     label2 <- registerFresh agent dm ToDo
-    pkRecipe <- getRecipe agent pk
+    maybePkRecipe <- tryGetRecipe agent pk
+    let pkRecipe = H.extractRecipe maybePkRecipe
     chs <- decomposeToDo agent
     return ([CTry (label2, RComp "open" [pkRecipe, RAtom label])] ++ chs)
   else
@@ -214,7 +168,8 @@ decompose agent msg@(Comp "inv" (pk:[])) label = do
   cond <- canDeduceFromFrame agent pk
   if cond then do
     register agent msg Done label
-    label2 <- getLabel agent pk "Could not find label for public key"
+    maybeLabel2 <- tryGetLabel agent pk
+    let label2 = H.extractLabel maybeLabel2
     return ([CTry (label2, RComp "pubk" [RAtom label])])
   else do
     register agent msg Done label
@@ -223,37 +178,29 @@ decompose agent msg@(Comp "inv" (pk:[])) label = do
 -- default decomposition
 decompose agent msg@(Comp id args) label = do
   cond <- canDeduceFromFrame agent msg
-  --cond2 <- isToDo agent label --TODO: investigate why is it called twice
-  if cond then do
+  argsRecipes <- tryGetRecipes agent args
+  if cond && (all (Nothing /=) argsRecipes) then do
     register agent msg Done label
-    argsRecipes <- getRecipes agent args
-    return ([CIf (label, RComp id argsRecipes)])
+    let recipes = H.extractRecipes argsRecipes
+    return ([CIf (label, RComp id recipes)])
   else
     return []
 
-isPublicFunction :: String -> MState Bool
--- check whether the identifier is a public function
-isPublicFunction func = do
-  state <- get
-  return (any (func ==) (pubFunc state))
-
-addPublicFunction :: String -> MState ()
-addPublicFunction func = do
-  state <- get
-  put state { pubFunc = (func:(pubFunc state)) }
-
-canDeduceFromFrame :: Agent -> Msg -> MState Bool
+canDeduceFromFrame :: Agent -> Msg -> S.MState Bool
 -- checks whether an atom can be deduced from the frame
-canDeduceFromFrame agent msg@(Atom _) = do
-  isInAgentsFrame agent msg
+canDeduceFromFrame agent msg@(Atom a) = do
+  inFrame <- isInAgentsFrame agent msg
+  inSigma0 <- S.isInSigma0 a
+  inSigma <- S.isInSigma a
+  return (inFrame || inSigma0)
 -- checks whether a composition can be deduced from the frame
 canDeduceFromFrame agent msg@(Comp id args) = do
   isInFrame <- isInAgentsFrame agent msg
-  idAllowed <- isPublicFunction id
+  idAllowed <- S.isPublicFunction id (length args)
   allArgsCanBeDeduced <- canDeduceManyFromFrame agent args
   return (isInFrame || (idAllowed && allArgsCanBeDeduced))
 
-canDeduceManyFromFrame :: Agent -> [Msg] -> MState Bool
+canDeduceManyFromFrame :: Agent -> [Msg] -> S.MState Bool
 -- checks whether a list of messages can be deduced from agent's frame
 canDeduceManyFromFrame agent [] = do
   return True
@@ -262,51 +209,30 @@ canDeduceManyFromFrame agent (msg:msgs) = do
   canRestDeduce <- canDeduceManyFromFrame agent msgs
   return (canDeduce && canRestDeduce)
 
-receive :: Agent -> Msg -> MState (Label,[Check])
+receive :: Agent -> Msg -> S.MState (Label,[Check])
 receive agent msg = do
   label <- freshLabel
   register agent msg ToDo label
   checks <- decomposeToDo agent
   return (label, checks)
 
+-- TODO: clean up main
+
 main :: IO ()
 main = do
-  ---- pair example
-  -- let x = Comp "pair" [Atom "a", Comp "pair" [Atom "b", Atom "c"]]
-  ---- scrypt example
-  -- let x = Comp "pair" [Atom "sk", (Comp "scrypt" [Atom "sk", Atom "secret"])]
-  -- let x = Comp "pair" [(Comp "scrypt" [Atom "sk", Atom "secret"]), Atom "sk"]
-  -- let x = Comp "scrypt" [Atom "sk", Atom "secret"]
-  ---- crypt example
-  -- let x = Comp "pair" [Comp "inv" [Atom "pk"], (Comp "crypt" [Atom "pk", Atom "secret"])]
-  -- let x = Comp "crypt" [Atom "pk", Atom "secret"]
-  ---- sign example
-  -- let x = Comp "pair" [Atom "pk", (Comp "sign" [Comp "inv" [Atom "pk"], Atom "secret"])]
-  -- let x = Comp "sign" [Comp "inv" [Atom "pk"], Atom "secret"]
-  ---- test for deducing scrypt(sk, secret)
-  -- let x = Comp "pair" [Atom "secret", Atom "sk"]
-  
-  -- composed key example
-  -- pair(scrypt(scrypt(sk,N),secret),N)
-  -- let x = Comp "pair" [Comp "scrypt" [Comp "scrypt" [Atom "sk", Atom "N"] , Atom "secret"], Atom "N"]
-  -- let xx = Atom "sk"
-
   -- composition check example
   let x = Comp "pair" [Atom "sk", Atom "N"]
   let xx = Comp "h" [Atom "sk", Atom "N"]
 
-
-
-
   let initKnowledgeA = [Atom "A", Comp "pk" [Atom "A"], Comp "inv" [Comp "pk" [Atom "A"]]]
   let stt0 = initAgentsFrame "A" initKnowledgeA
   let stt1 = receive "A" x
-  let st1:[] = execMState stt1 initialState
-  let canDeduce = evalMState (canDeduceFromFrame "A" (Comp "scrypt" [Atom "sk", Atom "secret"])) st1
-  let canDeduce2 = evalMState (canDeduceFromFrame "A" (Atom "secret")) st1
+  let st1:[] = S.execMState stt1 S.initialState
+  let canDeduce = S.evalMState (canDeduceFromFrame "A" (Comp "scrypt" [Atom "sk", Atom "secret"])) st1
+  let canDeduce2 = S.evalMState (canDeduceFromFrame "A" (Atom "secret")) st1
   let stt2 = receive "A" xx
-  let st2:[] = execMState stt2 st1
-  let canDeduce3 = evalMState (canDeduceFromFrame "A" (Atom "secret")) st2
+  let st2:[] = S.execMState stt2 st1
+  let canDeduce3 = S.evalMState (canDeduceFromFrame "A" (Atom "secret")) st2
   putStrLn $ show st1
   putStrLn $ show st2
   putStrLn $ show canDeduce

@@ -1,0 +1,84 @@
+SOURCE CODE:
+
+Actions:
+  A: new N1, N2
+  A -> B: pair(N1,h(N1,N2))
+  B -> A: ok
+  A -> B: N2
+  B -> A: ok
+
+[
+  Local "A" (ANew "A" ["N1", "N2"]), 
+  Comm "A" "B" (Comp "pair" [Atom "N1", Comp "h" [Atom "N1", Atom "N2"]]), 
+  Comm "B" "A" (Atom "ok"), 
+  Comm "A" "B" (Atom "N2"), 
+  Comm "B" "A" (Atom "ok")
+]
+
+
+GENERATED CODE:
+
+
+Sigma0:
+  public T5/0, T4/0, T3/0, T2/0, T1/0, ok/0
+
+
+Cells:
+  sessionTxn[S] := T1
+  rcvN2[S] := 0
+  rcvX4[S] := 0
+  rcvX5[S] := 0
+
+Transaction T1:
+  new S.
+  new N1,N2.
+  send pair(N1,h(N1,N2)).
+  send S.
+  nil
+
+Transaction T2:
+  receive X3.
+  receive S.
+  T := sessionTxn[S].
+  if (T = T2) then
+    try X4=proj1(X3) in         // need to write to the X4 and X5 cells
+      try X5=proj2(X3) in
+        send ok.
+        send S.
+        nil
+      catch nil
+    catch nil
+  else nil
+
+Transaction T3:
+  receive X6.
+  receive S.
+  T := sessionTxn[S].
+  N2 := rcvN2[S].
+  if (T = T3) then
+    send N2.
+    send S.
+    nil
+  else nil
+
+Transaction T4:
+  receive X7.
+  receive S.
+  T := sessionTxn[S].
+  X4 := rcvX4[S].
+  X5 := rcvX5[S].
+  if (T = T4) then
+    if (X5 = h(X4,X7)) then
+      send ok.
+      send S.
+      nil
+    else nil
+  else nil
+
+Transaction T5:
+  receive X8.
+  receive S.
+  T := sessionTxn[S].
+  if (T = T5) then
+    nil
+  else nil

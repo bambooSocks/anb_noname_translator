@@ -52,26 +52,6 @@ Transaction T2:
     catch nil
 
 
-What did I manage:
- - go through err messages
- - created the structure around the delayed checking
- - restructured the code so that processes contain only the needed information and represent NN
- - actions and agent actions are used for analysis (from check to convert) 
-
-What to do:
- - fix double checking of the struct
- - delayed checking
-    - example
-    - retrieve old message 
- - if statements
-
- - merge registers
- - consolidate if processes
-
-
-
-session ids
-
 Sigma:
     h/1
 
