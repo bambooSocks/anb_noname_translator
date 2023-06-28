@@ -53,6 +53,12 @@ recipeToStr (RComp id args) = do
   let argStr = intercalate "," (map recipeToStr args)
   id ++ "(" ++ argStr ++ ")"
 
+recipeToMsg :: Recipe -> Msg
+recipeToMsg (RAtom x) = Atom x
+recipeToMsg (RComp id args) = do
+  let mArgs = map recipeToMsg args
+  Comp id mArgs
+
 formulaToStr :: Formula -> String
 formulaToStr (BAnd f1 f2) = do
   "(" ++ (formulaToStr f1) ++ " && " ++ (formulaToStr f2) ++ ")"
@@ -69,7 +75,7 @@ unableErrorMsg msg agent =
 
 getCellNameFromLabel :: Label -> NNCell
 getCellNameFromLabel label =
-  ("rcv" ++ label, Atom "S", Atom "null") -- TODO: add null/0 to default sigma0
+  ("rcv" ++ label, Atom "S", Atom "null")
 
 getReadProcessFromLabels :: [Label] -> [NNProcess]
 getReadProcessFromLabels ls =

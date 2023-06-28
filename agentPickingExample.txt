@@ -1,0 +1,24 @@
+Sigma0:
+
+public a/0 b/0 i/0
+
+Transaction T1:
+  * A in {a,b}.
+  * B in {a,b,i}.
+  new M1, N.
+  send pair(A,crypt(M1,pk(B), N)).
+  nil
+
+Transaction T2:
+  receive X.
+  try A = proj1(X) in
+      try EM = proj2(X) in
+      try M = dcrypt(EM,inv(pk(B))) in       -- how do I reperesent B here?
+          new M2, N.
+          send crypt(M2, pk(A), N).
+          nil
+      catch nil
+      catch nil
+  catch nil
+
+Bound: 3

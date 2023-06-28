@@ -22,12 +22,16 @@ B -> A: ok
 
 # in NN
 
+Sigma0
+
+t1, ... dummy
+
 Cells:
-	sessionTxn[S] := T1
-	rcvX3[S] := 0
-	rcvX4[S] := 0
-	rcvX5[S] := 0
-	rcvX8[S] := 0
+	sessionTxn[S] := t1
+	rcvX3[S] := dummy
+	rcvX4[S] := dummy
+	rcvX5[S] := dummy
+	rcvX8[S] := dummy
 
 Transaction T1:
 	new(S).
@@ -40,7 +44,7 @@ Transaction T2:
 	receive(X3).
 	receive(S).
 	T := sessionTxn[S].
-	if (T = T2) then
+	if (T = t2) then
 		rcvX3[S] := X3.
 		send(ok).
 		send(S).
@@ -66,7 +70,8 @@ Transaction T4:
 		rcvX5[S] := X5.
 		try X6=proj1(X5) in
 			try X7=proj2(X5) in
-				if X3=h(X6,X7) then // need to retrieve X3
+				X3 := rcvX3[S].
+                if X3=h(X6,X7) then // need to retrieve X3
 					send(ok).
 					send(S).
 					nil

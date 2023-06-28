@@ -1,6 +1,6 @@
 
 [
-	Local "A" (ANew "A" ["N0", "N1", "N2"]),
+	Local "A" (ANew "A" ["N1", "N2"]),
 	Comm "A" "B" (Comp "pair" [Atom "N1", Comp "h" [Atom "N1", Atom "N2"]]),
 	Comm "B" "A" (Atom "ok"),
 	Comm "A" "B" (Atom "N2"),
@@ -22,17 +22,19 @@ B -> A: ok
 
 # in NN
 
+have a state per agent and extractors for each element
+
 Cells:
-	sessionTxn[S] := T1
-	rcvX3[S] := 0
-	rcvX4[S] := 0
-	rcvX5[S] := 0
-	rcvX8[S] := 0
+sessionTxn[S] := T1
+rcvX3[S] := 0
+rcvX6[S] := 0
+rcvX7[S] := 0
+rcvX8[S] := 0
 
 Transaction T1:
 	new(S).
 	new(N1,N2).
-	send(h(N1,N2)).
+	send(pair(N1,h(N1,N2))).
 	send(S).
 	nil
 
@@ -42,37 +44,37 @@ Transaction T2:
 	T := sessionTxn[S].
 	if (T = T2) then
 		rcvX3[S] := X3.
-		send(ok).
-		send(S).
-		nil
+		try X4=proj1(X3) in
+			try X5=proj2(X3) in // X5 has to be stored
+				send(ok).
+				send(S).
+				nil
+			catch nil
+		catch nil
 	else nil
 
 Transaction T3:
-	receive(X4).
+	receive(X6).
 	receive(S).
 	T := sessionTxn[S].
 	if (T = T3) then
-		rcvX4[S] := X4.
-		send(pair(N1,N2)).
+		rcvX6[S] := X6.
+		send(N2).
 		send(S).
 		nil
 	else nil
 
 Transaction T4:
-	receive(X5).
+	receive(X7).
 	receive(S).
 	T := sessionTxn[S].
 	if (T = T4) then
-		rcvX5[S] := X5.
-		try X6=proj1(X5) in
-			try X7=proj2(X5) in
-				if X3=h(X6,X7) then // need to retrieve X3
-					send(ok).
-					send(S).
-					nil
-				else nil
-			catch nil
-		catch nil
+		rcvX7[S] := X7.
+		if X5=h(X4,X7) then // X5 has to be retrieved
+			send(ok).
+			send(S).
+			nil
+		else nil
 	else nil
 
 Transaction T5:

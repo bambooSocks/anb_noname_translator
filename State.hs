@@ -50,55 +50,55 @@ execMState :: MState a -> State -> [State]
 -- apply the state transformer on an state and return the final state
 execMState = ST.execStateT
 
-isPublicFunction :: String -> Int -> MState Bool
--- check whether the identifier is a public function with correct arity
-isPublicFunction func arity = do
+isPublicId :: String -> Int -> MState Bool
+-- check whether the identifier is public with correct arity
+isPublicId id arity = do
   state <- get
-  return (any (\ (f, a) -> f == func && a == arity) (pubFunc state))
+  let isPubFunc = any (\(i,a) -> i == id && a == arity) (pubFunc state)
+  inSig0 <- isInSigma0 id arity
+  inSig <- isInSigma id arity
+  return (isPubFunc || inSig0 || inSig)
 
-addPublicFunction :: String -> Int -> MState ()
-addPublicFunction func arity = do
+isInSigma0 :: String -> Int -> MState Bool
+isInSigma0 id arity = do
   state <- get
-  put state { pubFunc = ((func, arity):(pubFunc state)) }
+  return (any (\ (i,a) -> i == id && a == arity) (sigma0 state))
 
-isInSigma0 :: String  -> MState Bool
-isInSigma0 id = do
+isInSigma :: String -> Int -> MState Bool
+isInSigma id arity = do
   state <- get
-  return (any (\ (i,_) -> i == id) (sigma0 state))
+  return (any (\ (i,a) -> i == id && a == arity) (sigma state))
 
-isInSigma :: String-> MState Bool
-isInSigma id = do
+isInSigmaPriv :: String -> Int -> MState Bool
+isInSigmaPriv id arity = do
   state <- get
-  return (any (\ (i,_) -> i == id) (sigma0 state))
-
-isInSigmaPriv :: String -> MState Bool
-isInSigmaPriv id = do
-  state <- get
-  return (any (\ (i,_) -> i == id) (sigma0 state))
+  return (any (\ (i,a) -> i == id && a == arity) (sigmaPriv state))
 
 addToSigma0 :: String -> Int -> MState ()
 addToSigma0 id arity = do
   state <- get
   put state { sigma0 = ((id, arity):(sigma0 state)) }
 
-addToSigma :: String -> Int -> MState ()
-addToSigma id arity = do
-  state <- get
-  put state { sigma = ((id, arity):(sigma state)) }
+-- addToSigma :: String -> Int -> MState ()
+-- addToSigma id arity = do
+--   state <- get
+--   put state { sigma = ((id, arity):(sigma state)) }
 
-addToSigmaPriv :: String -> Int -> MState ()
-addToSigmaPriv id arity = do
-  state <- get
-  put state { sigmaPriv = ((id, arity):(sigmaPriv state)) }
+-- addToSigmaPriv :: String -> Int -> MState ()
+-- addToSigmaPriv id arity = do
+--   state <- get
+--   put state { sigmaPriv = ((id, arity):(sigmaPriv state)) }
 
 getPublicLabels :: MState [Label]
+-- get all public labels from sigma0 and sigma
 getPublicLabels = do
   state <- get
   let s0 = map fst (filter (\(_,a) -> a == 0) (sigma0 state))
   let s = map fst (filter (\(_,a) -> a == 0) (sigma state))
   return (s0 ++ s)
 
-addTransactionLabelsToSigma0 :: Int -> MState()
-addTransactionLabelsToSigma0 tCount = do
-  let labels = map (\i -> "T" ++ (show i)) [1..tCount]
-  for_ labels (\l -> addToSigma0 l 0)
+addInitialState :: Int -> [(String, Int)] -> [(String, Int)] -> [(String, Int)] -> MState ()
+addInitialState tCount sig0 sig sigP = do
+  state <- get
+  let tLabels = map (\i -> ("T" ++ (show i), 0)) [1..tCount]
+  put state { sigma0 = (("null", 0):tLabels ++ sig0 ++ (sigma0 state)), sigma = (sig ++ (sigma state)), sigmaPriv = (sigP ++ (sigmaPriv state)) }

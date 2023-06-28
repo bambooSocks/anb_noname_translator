@@ -1,24 +1,31 @@
 Sigma0:
+  public null/0 T1/0 T2/0 ok/0 wrong/0 a/0 b/0
+Sigma:
+  public h/2
 
-public a/0 b/0 i/0
+
+Cells:
+sessionTxn[S] := T1
 
 Transaction T1:
-  * A in {a,b}.
-  * B in {a,b,i}.
-  new M1, N.
-  send pair(A,crypt(M1,pk(B),N)).
-  nil
+new S.
+* x in {a,b}.
+send x.
+send S.
+nil
 
 Transaction T2:
-  receive X.
-  try A = proj1(X) in
-      try EM = proj2(X) in
-      try M = dcrypt(EM,inv(pk(B))) in
-          new M2, N.
-          send crypt(M2, pk(A),N).
-          nil
-      catch nil
-      catch nil
-  catch nil
+receive X2.
+receive S.
+T := sessionTxn[S].
+if (T = T2) then
+if (X2 = a) then
+send ok.
+send S.
+nil
+else send wrong.
+send S.
+nil
+else nil
 
 Bound: 3

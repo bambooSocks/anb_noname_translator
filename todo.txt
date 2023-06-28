@@ -1,20 +1,20 @@
 What did I manage:
  - consolidate if processes
- - worked on agents checking (each transaction has the same agent)
- - worked on retrieving correct cells when needed
+ - if statements
+ - agent checking for actions (correct action order)
  - delayed checking
+   - decided to do dynamic loading of cells
    - retrieve old message when needed (decided not to store the whole state, but store separate cells)
+ - cleaned up the code and split it up more
+ - implemented sigma0 sigma sigmaP
  
 
-
 What to do:
- - if statements
-   - test it out
  - delayed checking
    - save message if needed later
    - store it related to agent
- - crypt has 3 params for now use S ??
  - deal with agent picking ...
+ - proper testing
  - start defining the syntax
    - headers
      - sigmas
@@ -27,6 +27,7 @@ What to do:
      - local
      - comm
      - if action
+ - in verbatim code
 
 Extra:
  - merge registers
@@ -34,13 +35,3 @@ Extra:
 
 
 
-
-
-Q:
- - do we store every message or we prescan to find the ones that we need to?
- - private and public in sigma - difference?
- - do we actually need Knowledge?
- - what do we do with the two sigmas?
-
- - can we fix the random parameter of crypt and scrypt to S????
- - 

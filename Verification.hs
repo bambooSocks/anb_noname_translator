@@ -58,10 +58,11 @@ isInAgentsFrame agent msg = do
   return (any (msg ==) msgs)
 
 initAgentsFrame :: Agent -> [Msg] -> S.MState ()
+-- initialize agents frame with initial knowledge
 initAgentsFrame agent [] = do
   return ()
 initAgentsFrame agent (msg:msgs) = do
-  registerFresh agent msg ToDo -- not sure if we want it Done or ToDo (if it is Atoms only easier to set to Done)
+  registerFresh agent msg ToDo
   initAgentsFrame agent msgs
 
 tryGetLabel :: Agent -> Msg -> S.MState (Maybe Label)
@@ -72,12 +73,17 @@ tryGetLabel agent msg = do
     Just (label,_) -> return (Just label)
     Nothing -> return Nothing
 
+-- TODO: should fail if Nothing?
 tryGetRecipe :: Agent -> Msg -> S.MState (Maybe Recipe)
 tryGetRecipe agent msg@(Atom x) = do
-  label <- tryGetLabel agent msg
-  case label of
-    Just l -> return (Just (RAtom l))
-    Nothing -> return Nothing
+  isPub <- S.isPublicId x 0
+  if isPub then
+    return (Just (RAtom x))
+  else do
+    label <- tryGetLabel agent msg
+    case label of
+      Just l -> return (Just (RAtom l))
+      Nothing -> return Nothing
 tryGetRecipe agent msg@(Comp id args) = do
   isInFrame <- isInAgentsFrame agent msg
   if isInFrame then do
@@ -86,9 +92,9 @@ tryGetRecipe agent msg@(Comp id args) = do
       Just l -> return (Just (RAtom l))
       Nothing -> return Nothing
   else do
-    idAllowed <- S.isPublicFunction id (length args)
+    isPubFunc <- S.isPublicId id (length args) -- TODO: should fail if false
     convertedArgs <- tryGetRecipes agent args
-    if (idAllowed && (all (Nothing /=) convertedArgs)) then do
+    if (isPubFunc && (all (Nothing /=) convertedArgs)) then do
       let recipes = H.extractRecipes convertedArgs
       return (Just (RComp id recipes))
     else return Nothing
@@ -190,13 +196,13 @@ canDeduceFromFrame :: Agent -> Msg -> S.MState Bool
 -- checks whether an atom can be deduced from the frame
 canDeduceFromFrame agent msg@(Atom a) = do
   inFrame <- isInAgentsFrame agent msg
-  inSigma0 <- S.isInSigma0 a
-  inSigma <- S.isInSigma a
+  inSigma0 <- S.isInSigma0 a 0
+  inSigma <- S.isInSigma a 0
   return (inFrame || inSigma0)
 -- checks whether a composition can be deduced from the frame
 canDeduceFromFrame agent msg@(Comp id args) = do
   isInFrame <- isInAgentsFrame agent msg
-  idAllowed <- S.isPublicFunction id (length args)
+  idAllowed <- S.isPublicId id (length args)
   allArgsCanBeDeduced <- canDeduceManyFromFrame agent args
   return (isInFrame || (idAllowed && allArgsCanBeDeduced))
 

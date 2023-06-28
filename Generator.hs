@@ -21,34 +21,42 @@ splitActionsNewSession :: [Action] -> [[AgentAction]]
 -- split action into transactions with the new session ID action
 splitActionsNewSession actions@(act:_) = do
   let agent = H.getActionAgent act
-  splitActions actions [[ANew agent ["S"]]] 1
+  if checkActionOrder actions agent then
+    splitActions actions [[ANew agent ["S"]]] 1
+  else
+    error "Actions do not have a consistent agent assignment"
+
+checkActionOrder :: [Action] -> Agent -> Bool
+-- checks for the illegal action order
+checkActionOrder [] _ = 
+  True
+checkActionOrder ((Local agent _):as) lastAgent = do
+  (agent == lastAgent) && (checkActionOrder as agent)
+checkActionOrder ((Comm agent1 agent2 _):as) lastAgent = do
+  (agent1 == lastAgent) && (checkActionOrder as agent2)
+checkActionOrder ((If agent _ _ _):as) lastAgent = do
+  if as /= [] then
+    False
+  else do
+    (agent == lastAgent)
 
 splitActions :: [Action] -> [[AgentAction]] -> Int -> [[AgentAction]]
 -- split actions into corresponding transactions
 splitActions [] (t:ts) index = do
   let tts = ((t ++ [ANil]):ts)
   reverse tts
-splitActions ((Local agent aa):as) (t:ts) index =
-  if all (\a -> agent == (H.getAgentActionAgent a)) t then do
-    let newT = t ++ [aa]
-    splitActions as (newT:ts) index
-  else
-    error "Actions do not have a consistent agent"
-splitActions ((Comm agent1 agent2 m):as) (t:ts) index =
-  if all (\a -> agent1 == (H.getAgentActionAgent a)) t then do
-    let newT = t ++ [ASend agent1 m, ANil]
-    let newTS = [AReceive agent2 m ("T" ++ (show (index + 1)))]:newT:ts
-    splitActions as newTS (index + 1)
-  else
-    error "Actions do not have a consistent agent"
-splitActions ((If agent formula as1 as2):as) (t:ts) index =
-  if as /= [] then
-    error "If statement cannot be followed by another action"
-  else do
-    let ts1:_ = splitActions as1 [] 0
-    let ts2:_ = splitActions as2 [] 0
-    let newTS = ([AIf agent formula ts1 ts2] ++ t):ts
-    splitActions [] newTS (index + 1)
+splitActions ((Local agent aa):as) (t:ts) index = do
+  let newT = t ++ [aa]
+  splitActions as (newT:ts) index
+splitActions ((Comm agent1 agent2 m):as) (t:ts) index = do
+  let newT = t ++ [ASend agent1 m, ANil]
+  let newTS = [AReceive agent2 m ("T" ++ (show (index + 1)))]:newT:ts
+  splitActions as newTS (index + 1)
+splitActions ((If agent formula as1 as2):as) (t:ts) index = do
+  let ts1:_ = splitActions as1 [[]] 0
+  let ts2:_ = splitActions as2 [[]] 0
+  let newTS = (t ++ [AIf agent formula ts1 ts2]):ts
+  reverse newTS
 
 convertCheck :: Check -> [NNProcess] -> NNProcess
 -- convert checks into processes
@@ -65,9 +73,10 @@ convert aas = do
   ts <- convertTransactions aas
   let labels = map getTransactionLabels ts
   let (tts, ls) = unzip (map (updateTransaction pubLabels) (zip ts labels) )
-  -- error ("Labels " ++ (show labels))
   S.put state { S.cellLabels = (concat ls) ++ (S.cellLabels state) }
   return tts
+
+-- TODO: fix the writing of needed labels
 
 updateTransaction ::  [Label] -> (NNTransaction, (Set.Set Label, Set.Set Label)) -> (NNTransaction, [Label])
 updateTransaction pubLabels (t, (cl, rl)) = do
@@ -84,10 +93,10 @@ insertDependencies t (l:ls) = do
 insertDependency :: NNTransaction -> Label -> NNTransaction
 insertDependency (p:ps) label = do
   let (cl, rl) = getProcessLabels p
-  if (elem label cl) then
+  if (elem label cl) then -- this doesn't
     [p, (PWrite ("rcv" ++ label) (Atom "S") (Atom label))] ++ ps
   else
-    if (elem label rl) then
+    if (elem label rl) then -- this works
       [(PRead label ("rcv" ++ label) (Atom "S")), p] ++ ps
     else
       p:(insertDependency ps label)
@@ -100,6 +109,24 @@ convertTransactions (aa:aas) = do
   t <- convertTransaction aa
   ts <- convertTransactions aas
   return (t:ts)
+
+updateRecipesForFormula :: Agent -> Formula -> S.MState Formula
+-- check and update whether some of the 
+updateRecipesForFormula agent f@(BEq r1 r2) = do
+  newR1 <- V.tryGetRecipe agent (H.recipeToMsg r1)
+  newR2 <- V.tryGetRecipe agent (H.recipeToMsg r2)
+  case (newR1, newR2) of
+    (Just nr1, Just nr2) -> return (BEq nr1 nr2)
+    _ -> error ("Cannot update the formula (" ++ (H.formulaToStr f) ++ ") with recipes")
+updateRecipesForFormula agent (BAnd f1 f2) = do
+  uf1 <- updateRecipesForFormula agent f1
+  uf2 <- updateRecipesForFormula agent f2
+  return $ BAnd uf1 uf2
+updateRecipesForFormula agent (BNot f) = do
+  uf <- updateRecipesForFormula agent f
+  return $ BNot uf
+updateRecipesForFormula _ BTrue = do
+  return BTrue
 
 convertTransaction :: [AgentAction] -> S.MState NNTransaction
 -- convert agent action list to transaction
@@ -116,12 +143,13 @@ convertTransaction ((AReceive agent msg tLabel):as) = do
     PReceive "S", 
     PRead "T" "sessionTxn" (Atom "S"), -- TODO: add the write if it is neede later [PWrite ("rcv" ++ newLabel) (Atom "S") (Atom newLabel)]
     PIf (BEq (RAtom "T") (RAtom tLabel)) nestedChecks [PNil] ]
--- if action converter --TODO: finish me (not tested)
+-- if action converter
 convertTransaction ((AIf agent formula as1 as2):as) = do
+  newFormula <- updateRecipesForFormula agent formula
   ts <- convertTransaction as
   ts1 <- convertTransaction as1
   ts2 <- convertTransaction as2
-  return $ [PIf formula ts1 ts2] ++ ts
+  return $ [PIf newFormula ts1 ts2] ++ ts
 -- default case for other actions
 convertTransaction (a:as) = do
   t <- convertAgentAction a
@@ -137,6 +165,8 @@ convertAgentAction (ANew agent xs) = do
 -- send action converter
 convertAgentAction (ASend agent msg) = do
   result <- V.canDeduceFromFrame agent msg
+  -- state <- S.get
+  -- error ("FIND ME 1: " ++ (show result) ++ " msg: " ++ (show msg) ++ " state: " ++ (show state))
   if result then
     return [PSend msg, PSend (Atom "S")]
   else
@@ -145,7 +175,8 @@ convertAgentAction (ASend agent msg) = do
 convertAgentAction (APickDomain agent x domain) = do
   let atoms = map (\l -> Atom l) domain
   result <- V.canDeduceManyFromFrame agent atoms
-  if result then
+  if result then do
+    label <- V.registerFresh agent (Atom x) ToDo
     return [PPickDomain x domain]
   else
     error "Unable to deduce a recipe for domain pick process from agent's frame"
@@ -226,9 +257,9 @@ getRequiredLabelsFromFormula _ = []
 generateSigmas :: [(Label, Int)] -> [(Label, Int)] -> [(Label, Int)] -> String
 -- generate NN code for the sigma0 and sigma headers
 generateSigmas sig0 sig sigP = do
-  let sig0Str = if sig0 == [] then "" else "\n  public " ++ (intercalate ", " (map generateDef sig0))
-  let sigStr = if sig == [] then "" else "\n  public " ++ (intercalate ", " (map generateDef sig))
-  let sigPStr = if sigP == [] then "" else "\n  private " ++ (intercalate ", " (map generateDef sigP))
+  let sig0Str = if sig0 == [] then "" else "\n  public " ++ (intercalate " " (map generateDef sig0))
+  let sigStr = if sig == [] then "" else "\n  public " ++ (intercalate " " (map generateDef sig))
+  let sigPStr = if sigP == [] then "" else "\n  private " ++ (intercalate " " (map generateDef sigP))
   
   (if sig0Str == "" then "" else "Sigma0:" ++ sig0Str) ++
     (if (sigStr ++ sigPStr) == "" then "" else "\nSigma:" ++ sigStr ++ sigPStr) ++ "\n\n"
@@ -272,13 +303,13 @@ generateProcess (PReceive l) =
   "receive " ++ l ++ ".\n"
 generateProcess (PTry (l,r) ps) = do
   let subProcesses = concatMap generateProcess ps
-  "try " ++ l ++ "=" ++ (H.recipeToStr r) ++ " in\n" ++ subProcesses ++ "\ncatch nil"
+  "try " ++ l ++ " = " ++ (H.recipeToStr r) ++ " in\n" ++ subProcesses ++ "\ncatch nil"
 generateProcess (PIf f ps1 ps2) = do
   let ifProcesses = concatMap generateProcess ps1
   let elseProcesses = concatMap generateProcess ps2
   "if " ++ (H.formulaToStr f) ++ " then\n" ++ ifProcesses ++ "\nelse " ++ elseProcesses
 generateProcess (PPickDomain x domain) = do
-  "* " ++ x ++ "in {" ++ (intercalate "," domain) ++ "}.\n"
+  "* " ++ x ++ " in {" ++ (intercalate "," domain) ++ "}.\n"
 generateProcess (PRead label cell msg) =
   label ++ " := " ++ cell ++ "[" ++ (H.msgToStr msg) ++ "].\n"
 generateProcess (PWrite cell msg1 msg2) =
@@ -299,25 +330,31 @@ main = do
   -- let actions = [Local "A" (ANew "A" ["N1", "N2"]), Comm "A" "B" (Comp "h" [Atom "N1", Atom "N2"]), Comm "B" "A" (Atom "ok"), Comm "A" "B" (Comp "pair" [Atom "N1", Atom "N2"]), Comm "B" "A" (Atom "ok")]
   -- delayed check 2
   let actions = [Local "A" (ANew "A" ["N1", "N2"]), Comm "A" "B" (Comp "pair" [Atom "N1", Comp "h" [Atom "N1", Atom "N2"]]), Comm "B" "A" (Atom "ok"), Comm "A" "B" (Atom "N2"), Comm "B" "A" (Atom "ok")]
-
-  -- load header info
-  let st:[] = S.execMState (S.addToSigma0 "ok" 0) S.initialState
-  let initialCells = [("sessionTxn", Atom "S", Atom "T1")]
-  let st1:[] = S.execMState (S.addPublicFunction "h" 2) st
+  -- if statements
+  -- let actions = [Local "A" (APickDomain "A" "x" ["a", "b"]), Comm "A" "B" (Atom "x"), Local "B" (ANew "A" ["TEST"]), If "B" (BEq (RAtom "x") (RAtom "a")) [Comm "B" "A" (Atom "ok")] [Comm "B" "A" (Atom "wrong")]]
 
   -- process actions
   let splitActs = splitActionsNewSession actions
   putStrLn "Split Actions:"
   putStrLn $ show splitActs
-  -- add Transaction names to sigma0
-  let st2:[] = S.execMState (S.addTransactionLabelsToSigma0 (length splitActs)) st1
+  -- load sigmas
+  let st:[] = S.execMState 
+                (S.addInitialState 
+                  (length splitActs) 
+                  [("ok", 0), ("wrong", 0), ("a", 0), ("b", 0)] 
+                  [("h", 2)] 
+                  []) S.initialState
+  let initialCells = [("sessionTxn", Atom "S", Atom "T1")]
+
   putStrLn "\nState:"
-  let (transactions, state):[] = S.runMState (convert splitActs) st2
+  let (transactions, state):[] = S.runMState (convert splitActs) st
   putStrLn $ show state
+
   putStrLn "\nTransactions:"
   putStrLn $ show transactions
+
   putStrLn "\nGENERATED CODE:\n"
-  let cells = map getCellNameFromLabel (S.cellLabels state)
+  let cells = map H.getCellNameFromLabel (S.cellLabels state)
   putStrLn $ generateSigmas (S.sigma0 state) (S.sigma state) (S.sigmaPriv state)
   putStrLn $ generateCells (initialCells ++ cells)
   putStrLn $ generateTransactions 1 transactions
