@@ -1,0 +1,31 @@
+Sigma0:
+  ok, null, state/2
+
+Sigma:
+  g, h/2
+  private sk/2
+
+Agents:
+  A, B, server
+
+Actors:
+  a, b
+  dishonest i
+
+Knowledge:
+  A: A, B, server, sk(A, server)
+  B: A, B, server, sk(B, server)
+  server: A, B, server, sk(A, server), sk(B, server)
+
+Cells:
+  memCell[S] := null
+
+Actions:
+  A: new N1
+  A -> B: h(A, N2)
+  B: new N2
+  B -> server: scrypt(h(B, h(A, N1)), sk(B, server), N2)
+  server: new N3
+  server -> A: scrypt(h(B, h(A, N1)), sk(A, server), N3)
+
+Bound: 3

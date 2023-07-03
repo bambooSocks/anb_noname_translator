@@ -14,19 +14,20 @@ import qualified State as S
 import qualified Helper as H
 import qualified Verification as V
 import Data.Foldable (for_)
-import Data.List (intercalate)
+import Data.Char (isUpper)
+import qualified Data.List as List
 import qualified Data.Set as Set
 
 splitActionsNewSession :: [Action] -> [[AgentAction]]
 -- split action into transactions with the new session ID action
 splitActionsNewSession actions@(act:_) = do
   let agent = H.getActionAgent act
-  if checkActionOrder actions agent then
-    splitActions actions [[ANew agent ["S"]]] 1
+  if checkActionOrder actions agent then do
+    splitActions actions [[ANew agent ["S"]]] 1 -- TODO: this has to be consolidated with the first new
   else
     error "Actions do not have a consistent agent assignment"
 
-checkActionOrder :: [Action] -> Agent -> Bool
+checkActionOrder :: [Action] -> Agent -> Bool -- TODO: check whether the agents are defined or not
 -- checks for the illegal action order
 checkActionOrder [] _ = 
   True
@@ -68,38 +69,54 @@ convertCheck (CIf (l, r)) acc = do
 convert :: [[AgentAction]] -> S.MState [NNTransaction]
 -- convert split actions into proper transactions
 convert aas = do
+  naas <- insertAgentPickers aas
+  ts <- convertTransactions naas
   state <- S.get
   pubLabels <- S.getPublicLabels
-  ts <- convertTransactions aas
-  let labels = map getTransactionLabels ts
-  let (tts, ls) = unzip (map (updateTransaction pubLabels) (zip ts labels) )
-  S.put state { S.cellLabels = (concat ls) ++ (S.cellLabels state) }
+  let missingLabels = getMissingLabels ts pubLabels
+  let tts = map (insertDependencies missingLabels) ts
+  S.put state { S.cellLabels = missingLabels ++ (S.cellLabels state) }
   return tts
 
--- TODO: fix the writing of needed labels
+insertDependencies :: [Label] -> NNTransaction -> NNTransaction
+-- insert all dependencies read and write processes into a transaction
+insertDependencies [] t = t
+insertDependencies (l:ls) t = do
+  let nt = insertDependency l t
+  insertDependencies ls nt
 
-updateTransaction ::  [Label] -> (NNTransaction, (Set.Set Label, Set.Set Label)) -> (NNTransaction, [Label])
-updateTransaction pubLabels (t, (cl, rl)) = do
-  let missingLabels = Set.toList ((rl Set.\\ cl) Set.\\ (Set.fromList pubLabels))
-  let newT = insertDependencies t missingLabels
-  (newT, missingLabels)
-
-insertDependencies :: NNTransaction -> [Label] -> NNTransaction
-insertDependencies t [] = t
-insertDependencies t (l:ls) = do
-  let newT = insertDependency t l
-  insertDependencies newT ls
-
-insertDependency :: NNTransaction -> Label -> NNTransaction
-insertDependency (p:ps) label = do
-  let (cl, rl) = getProcessLabels p
-  if (elem label cl) then -- this doesn't
-    [p, (PWrite ("rcv" ++ label) (Atom "S") (Atom label))] ++ ps
+insertWrite :: Label -> NNTransaction -> NNTransaction -- TODO: this has to be done at the end not after the receiving action
+-- insert memory write process after the process that introduces the variable
+insertWrite _ [] =
+  []
+insertWrite label ts@(p@(PIf f ps1 ps2):ps) = do
+  let wps1 = insertWrite label ps1
+  let wps2 = insertWrite label ps2
+  (PIf f wps1 wps2):(insertWrite label ps)
+insertWrite label ts@(p@(PTry c@(l, _) pps):ps) = do
+  if (label == l) then do
+    let writeP = (PWrite (H.memCellPrefix ++ label) (Atom "S") (Atom label))
+    (PTry c (writeP:pps)):ps
   else
-    if (elem label rl) then -- this works
-      [(PRead label ("rcv" ++ label) (Atom "S")), p] ++ ps
-    else
-      p:(insertDependency ps label)
+    (PTry c (insertWrite label pps)):(insertWrite label ps)
+insertWrite label ts@(p:ps) = do
+  let (pcl, _) = getProcessLabels p (Set.empty, Set.empty)
+  if (elem label pcl) then
+    [p, (PWrite (H.memCellPrefix ++ label) (Atom "S") (Atom label))] ++ ps
+  else
+    p:(insertWrite label ps)
+
+insertDependency :: Label -> NNTransaction -> NNTransaction
+-- insert memory writing or reading to the right location in transaction
+insertDependency _ [] = do
+  []
+insertDependency label ts = do
+  let (cl, rl) = getTransactionLabels (Set.empty, Set.empty) ts
+  let ts1 = if (elem label cl) then insertWrite label ts else ts
+  if (elem label (rl Set.\\ cl)) then 
+    (PRead label (H.memCellPrefix ++ label) (Atom "S")):ts1 
+  else 
+    ts1
 
 convertTransactions :: [[AgentAction]] -> S.MState [NNTransaction]
 -- convert split agent actions into transactions
@@ -137,11 +154,10 @@ convertTransaction ((AReceive agent msg tLabel):as) = do
   (newLabel, checks) <- V.receive agent msg
   ts <- convertTransaction as
   let nestedChecks = foldr (\ c acc -> [convertCheck c acc]) ts checks 
-  -- let readActions = getReadProcessFromLabels ls -- TODO: add read actions if needed
   return [
     PReceive newLabel, 
-    PReceive "S", 
-    PRead "T" "sessionTxn" (Atom "S"), -- TODO: add the write if it is neede later [PWrite ("rcv" ++ newLabel) (Atom "S") (Atom newLabel)]
+    PReceive "S",
+    PRead "T" "sessionTxn" (Atom "S"),
     PIf (BEq (RAtom "T") (RAtom tLabel)) nestedChecks [PNil] ]
 -- if action converter
 convertTransaction ((AIf agent formula as1 as2):as) = do
@@ -165,8 +181,6 @@ convertAgentAction (ANew agent xs) = do
 -- send action converter
 convertAgentAction (ASend agent msg) = do
   result <- V.canDeduceFromFrame agent msg
-  -- state <- S.get
-  -- error ("FIND ME 1: " ++ (show result) ++ " msg: " ++ (show msg) ++ " state: " ++ (show state))
   if result then
     return [PSend msg, PSend (Atom "S")]
   else
@@ -201,40 +215,71 @@ convertAgentAction (ANil) = do
 convertAgentAction a = do
   return [PNil]
 
-getTransactionLabels :: NNTransaction -> (Set.Set Label, Set.Set Label)
--- returns a tuple of create Labels and required Labels for a transaction
-getTransactionLabels [] = 
-  (Set.empty, Set.empty)
-getTransactionLabels (p:ps) = do
-  let (i, o) = getProcessLabels p
-  let (ii, oo) = getTransactionLabels ps
-  (Set.union i ii, Set.union o oo)
+getHonestAgentPicker :: Agent -> Agent -> S.MState AgentAction
+getHonestAgentPicker actingAgent pickedAgent = do
+  state <- S.get
+  return (APickDomain actingAgent pickedAgent (S.hActors state))
 
-getProcessLabels :: NNProcess -> (Set.Set Label, Set.Set Label)
+getAllAgentPickers :: Agent -> [Agent] -> S.MState [AgentAction]
+getAllAgentPickers _ [] = do
+  return []
+getAllAgentPickers agent (a:as) = do
+  ap <- getAllAgentPicker agent a
+  aps <- getAllAgentPickers agent as
+  return (ap:aps)
+
+getAllAgentPicker :: Agent -> Agent -> S.MState AgentAction
+getAllAgentPicker actingAgent pickedAgent = do
+  state <- S.get
+  return (APickDomain actingAgent pickedAgent ((S.hActors state) ++ (S.dActors state)))
+
+insertAgentPickers :: [[AgentAction]] -> S.MState [[AgentAction]]
+insertAgentPickers ((a:as):aas) = do
+  let currentAgent = H.getAgentActionAgent a
+  agents <- S.getVariableAgents
+  hAgentPicker <- getHonestAgentPicker currentAgent currentAgent
+  dAgentPickers <- getAllAgentPickers currentAgent (agents List.\\ [currentAgent])
+  return ((a:hAgentPicker:dAgentPickers ++ as):aas)
+
+getMissingLabels :: [NNTransaction] -> [Label] -> [Label]
+getMissingLabels ts pubLabels = do
+  let tLabels = map (getTransactionLabels (Set.empty, Set.empty)) ts
+  concatMap (\(cl, rl) -> Set.toList ((rl Set.\\ cl) Set.\\ (Set.fromList pubLabels))) tLabels
+
+getTransactionLabels :: (Set.Set Label, Set.Set Label) -> NNTransaction -> (Set.Set Label, Set.Set Label)
+-- returns a tuple of create Labels and required Labels for a transaction
+getTransactionLabels (cl, rl) [] = 
+  (cl, rl)
+getTransactionLabels (cl, rl) (p:ps) = do
+  let (pcl, prl) = getProcessLabels p (cl, rl)
+  getTransactionLabels (pcl, prl) ps
+
+getProcessLabels :: NNProcess -> (Set.Set Label, Set.Set Label) -> (Set.Set Label, Set.Set Label)
 -- returns a tuple of created Labels and required Labels for a process
-getProcessLabels (PReceive l) = 
-  (Set.fromList [l], Set.empty)
-getProcessLabels (PTry (l, r) _) =
-  (Set.fromList [l], Set.fromList (getRequiredLabelsFromRecipe r))
-getProcessLabels (PIf f t1 t2) = do
-  let (cl1, rl1) = getTransactionLabels t1
-  let (cl2, rl2) = getTransactionLabels t2
-  let rl = Set.fromList (getRequiredLabelsFromFormula f)
-  (Set.union cl1 cl2, Set.union (Set.union rl rl1) rl2)
-getProcessLabels (PNew ls) =
-  (Set.fromList ls, Set.empty)
-getProcessLabels (PSend m) =
-  (Set.empty, Set.fromList (getRequiredLabelsFromMessage m))
-getProcessLabels (PPickDomain x domain) = 
-  (Set.fromList [x], Set.fromList domain)
-getProcessLabels (PRead l _ m) =
-  (Set.fromList [l], Set.fromList (getRequiredLabelsFromMessage m))
-getProcessLabels (PWrite _ m1 m2) =
-  (Set.empty, Set.fromList((getRequiredLabelsFromMessage m1) ++ (getRequiredLabelsFromMessage m2)))
-getProcessLabels (PRelease _ f) =
-  (Set.empty, Set.fromList (getRequiredLabelsFromFormula f))
-getProcessLabels (PNil) =
-  (Set.empty, Set.empty)
+getProcessLabels (PReceive l) (cl, rl) = 
+  (Set.insert l cl, rl)
+getProcessLabels (PTry (l, r) t) (cl, rl) = do
+  let (ncl, nrl) = getTransactionLabels (cl, rl) t
+  (Set.insert l ncl, Set.union nrl (Set.fromList (getRequiredLabelsFromRecipe r)))
+getProcessLabels (PIf f t1 t2) (cl, rl) =do
+  let (cl1, rl1) = getTransactionLabels (cl, rl) t1
+  let (cl2, rl2) = getTransactionLabels (cl1, rl1) t2
+  let nrl = Set.fromList (getRequiredLabelsFromFormula f)
+  (cl2, Set.union nrl rl2)
+getProcessLabels (PNew ls) (cl, rl) =
+  (Set.union cl (Set.fromList ls), rl)
+getProcessLabels (PSend m) (cl, rl) =
+  (cl, (Set.union rl (Set.fromList (getRequiredLabelsFromMessage m))))
+getProcessLabels (PPickDomain x domain) (cl, rl) = 
+  (Set.insert x cl, Set.union rl (Set.fromList domain))
+getProcessLabels (PRead l _ m) (cl, rl) =
+  (Set.insert l cl, Set.union rl (Set.fromList (getRequiredLabelsFromMessage m)))
+getProcessLabels (PWrite _ m1 m2) (cl, rl) =
+  (cl, Set.union rl (Set.fromList((getRequiredLabelsFromMessage m1) ++ (getRequiredLabelsFromMessage m2))))
+getProcessLabels (PRelease _ f) (cl, rl) =
+  (cl, Set.union rl (Set.fromList (getRequiredLabelsFromFormula f)))
+getProcessLabels (PNil) (cl, rl) =
+  (cl, rl)
 
 getRequiredLabelsFromRecipe :: Recipe -> [Label]
 getRequiredLabelsFromRecipe (RAtom l) = [l]
@@ -257,9 +302,9 @@ getRequiredLabelsFromFormula _ = []
 generateSigmas :: [(Label, Int)] -> [(Label, Int)] -> [(Label, Int)] -> String
 -- generate NN code for the sigma0 and sigma headers
 generateSigmas sig0 sig sigP = do
-  let sig0Str = if sig0 == [] then "" else "\n  public " ++ (intercalate " " (map generateDef sig0))
-  let sigStr = if sig == [] then "" else "\n  public " ++ (intercalate " " (map generateDef sig))
-  let sigPStr = if sigP == [] then "" else "\n  private " ++ (intercalate " " (map generateDef sigP))
+  let sig0Str = if sig0 == [] then "" else "\n  public " ++ (List.intercalate " " (map generateDef sig0))
+  let sigStr = if sig == [] then "" else "\n  public " ++ (List.intercalate " " (map generateDef sig))
+  let sigPStr = if sigP == [] then "" else "\n  private " ++ (List.intercalate " " (map generateDef sigP))
   
   (if sig0Str == "" then "" else "Sigma0:" ++ sig0Str) ++
     (if (sigStr ++ sigPStr) == "" then "" else "\nSigma:" ++ sigStr ++ sigPStr) ++ "\n\n"
@@ -272,7 +317,7 @@ generateDef (label, arity) =
 generateCells :: [NNCell] -> String
 -- generate NN code for cell section
 generateCells cells = do
-  let cellsStr = intercalate "\n" (map generateCell cells)
+  let cellsStr = List.intercalate "\n" (map generateCell cells)
   "Cells:\n" ++ cellsStr ++ "\n"
 
 generateCell :: NNCell -> String
@@ -296,7 +341,7 @@ generateTransaction name ps = do
 generateProcess :: NNProcess -> String
 -- generate NN code from processes
 generateProcess (PNew xs) =
-  "new " ++ (intercalate "," xs) ++ ".\n"
+  "new " ++ (List.intercalate "," xs) ++ ".\n"
 generateProcess (PSend msg) =
   "send " ++ (H.msgToStr msg) ++ ".\n"
 generateProcess (PReceive l) =
@@ -309,7 +354,7 @@ generateProcess (PIf f ps1 ps2) = do
   let elseProcesses = concatMap generateProcess ps2
   "if " ++ (H.formulaToStr f) ++ " then\n" ++ ifProcesses ++ "\nelse " ++ elseProcesses
 generateProcess (PPickDomain x domain) = do
-  "* " ++ x ++ " in {" ++ (intercalate "," domain) ++ "}.\n"
+  "* " ++ x ++ " in {" ++ (List.intercalate "," domain) ++ "}.\n"
 generateProcess (PRead label cell msg) =
   label ++ " := " ++ cell ++ "[" ++ (H.msgToStr msg) ++ "].\n"
 generateProcess (PWrite cell msg1 msg2) =
@@ -341,9 +386,12 @@ main = do
   let st:[] = S.execMState 
                 (S.addInitialState 
                   (length splitActs) 
-                  [("ok", 0), ("wrong", 0), ("a", 0), ("b", 0)] 
+                  [("ok", 0), ("wrong", 0)] 
                   [("h", 2)] 
-                  []) S.initialState
+                  []
+                  ["A","B"]
+                  ["a","b"]
+                  ["i"]) S.initialState
   let initialCells = [("sessionTxn", Atom "S", Atom "T1")]
 
   putStrLn "\nState:"

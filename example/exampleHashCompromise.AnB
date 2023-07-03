@@ -1,11 +1,14 @@
 
-Sigma0:
-    Agent x in {t1, t2, t3}, B;
+
 
 Sigma:
     Function h/2;
     Number ok, owned;
     private Function sk/1, extract/1;
+
+Agents:
+    X, B
+    --Agent x in {t1, t2, t3}, B;
 
 Algebra:
     extract(h(sk(x),y)) -> x;

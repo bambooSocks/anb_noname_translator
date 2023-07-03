@@ -3,6 +3,7 @@ module State where
 import qualified Control.Monad.Trans.State as ST
 import qualified Data.Map as M
 import Data.Foldable (for_)
+import Data.Char (isUpper)
 import Types (Label, Msg, Agent, Marking(ToDo, Done), Frame, AgentFrames)
 
 data State = State
@@ -13,6 +14,9 @@ data State = State
   , sigma      :: [(String, Int)]
   , sigmaPriv  :: [(String, Int)]
   , cellLabels :: [Label]
+  , agents     :: [Agent]
+  , hActors    :: [Label]
+  , dActors    :: [Label]
   }
   deriving (Show)
 
@@ -25,6 +29,9 @@ initialState = State
   , sigma      = []
   , sigmaPriv  = []
   , cellLabels = []
+  , agents     = []
+  , hActors    = []
+  , dActors    = []
   }
 
 -- state monad
@@ -97,8 +104,25 @@ getPublicLabels = do
   let s = map fst (filter (\(_,a) -> a == 0) (sigma state))
   return (s0 ++ s)
 
-addInitialState :: Int -> [(String, Int)] -> [(String, Int)] -> [(String, Int)] -> MState ()
-addInitialState tCount sig0 sig sigP = do
+addInitialState :: Int -> [(String, Int)] -> [(String, Int)] -> [(String, Int)] -> [Agent] -> [String] -> [String] -> MState ()
+addInitialState tCount sig0 sig sigP as hacts dacts = do
   state <- get
   let tLabels = map (\i -> ("T" ++ (show i), 0)) [1..tCount]
-  put state { sigma0 = (("null", 0):tLabels ++ sig0 ++ (sigma0 state)), sigma = (sig ++ (sigma state)), sigmaPriv = (sigP ++ (sigmaPriv state)) }
+  let actors = map (\a -> (a,0)) (hacts ++ dacts)
+  put state { 
+    sigma0 = (("null", 0):tLabels ++ sig0 ++ actors ++ (sigma0 state)),
+    sigma = (sig ++ (sigma state)),
+    sigmaPriv = (sigP ++ (sigmaPriv state)),
+    agents = as,
+    hActors = hacts,
+    dActors = dacts }
+
+getVariableAgents :: MState [Agent]
+getVariableAgents = do
+  state <- get
+  return (filter (isUpper.head) (agents state))
+
+isAgent :: Agent -> MState Bool
+isAgent agent = do
+  state <- get
+  return (elem agent (agents state))

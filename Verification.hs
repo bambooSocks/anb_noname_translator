@@ -216,11 +216,21 @@ canDeduceManyFromFrame agent (msg:msgs) = do
   return (canDeduce && canRestDeduce)
 
 receive :: Agent -> Msg -> S.MState (Label,[Check])
+receive agent msg@(Atom x) = do
+  cond <- canDeduceFromFrame agent msg
+  label <- freshLabel
+  register agent msg ToDo label
+  checks <- decomposeToDo agent
+  if cond then
+    return (label, [CIf (label, RAtom x)] ++ checks)
+  else do
+    return (label, checks)
 receive agent msg = do
   label <- freshLabel
   register agent msg ToDo label
   checks <- decomposeToDo agent
   return (label, checks)
+
 
 -- TODO: clean up main
 

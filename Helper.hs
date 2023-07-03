@@ -73,10 +73,13 @@ unableErrorMsg :: Msg -> Agent -> String
 unableErrorMsg msg agent = 
   "Unable to deduce a recipe for " ++ (msgToStr msg) ++ " from agent " ++ agent ++ "'s frame"
 
+memCellPrefix :: String
+memCellPrefix = "mem_"
+
 getCellNameFromLabel :: Label -> NNCell
 getCellNameFromLabel label =
-  ("rcv" ++ label, Atom "S", Atom "null")
+  (memCellPrefix ++ label, Atom "S", Atom "null")
 
 getReadProcessFromLabels :: [Label] -> [NNProcess]
 getReadProcessFromLabels ls =
-  map (\l -> PRead l ("rcv" ++ l) (Atom "S")) ls
+  map (\l -> PRead l (memCellPrefix ++ l) (Atom "S")) ls

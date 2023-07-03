@@ -1,26 +1,29 @@
 
 Sigma0:
-    Agent a, b, server;
-    DishonestAgent i;
-    Number yes, no;
+    yes, no
 
-Domain:
-    * x in {a, b, i}
-    * y in {yes, no}
+Agents:
+    X, server
+
+Actors:
+    a, b
+    dishonest I
 
 Knowledge:
-    x: inv(pk(x));
+    X: X, inv(pk(X))
+    server: X
 
 Actions:
-    server: if y = yes then
+    server: * y in {yes, no}
+    if y = yes then
         server: new N1, N2
-        server -> x: crypt(pk(x),pair(yes,N1),N2)
+        server -> X: crypt(pk(X),pair(yes,N1),N2)
     else
         server: new N1
-        server -> x: crypt(pk(x),no,N2)
+        server -> X: crypt(pk(X),no,N2)
     end
 
-Bound: 4;
+Bound: 4
 
 # built in functions:
 crypt, pk, inv, pair

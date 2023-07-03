@@ -1,29 +1,68 @@
 Sigma0:
-  public null/0 T1/0 T2/0 ok/0 wrong/0 a/0 b/0
+  public null/0 T1/0 T2/0 T3/0 T4/0 T5/0 ok/0 wrong/0 a/0 b/0
 Sigma:
   public h/2
 
 
 Cells:
 sessionTxn[S] := T1
+mem_N2[S] := null
+mem_X4[S] := null
+mem_X5[S] := null
 
 Transaction T1:
-new S.
-* x in {a,b}.
-send x.
+new S, N1, N2.
+mem_N2[S] := N2.
 send S.
+send pair(N1,h(N1,N2)).
 nil
 
 Transaction T2:
-receive X2.
+receive X3.
 receive S.
 T := sessionTxn[S].
 if (T = T2) then
-if (X2 = a) then
-send ok.
+try X4 = proj1(X3) in
+try X5 = proj2(X3) in
+mem_X4[S] := X4.
+mem_X5[S] := X5.
 send S.
+send ok.
 nil
-else send wrong.
+catch nil
+catch nil
+else nil
+
+Transaction T3:
+N2 := mem_N2[S].
+receive X6.
+receive S.
+T := sessionTxn[S].
+if (T = T3) then
+send S.
+send N2.
+nil
+else nil
+
+Transaction T4:
+X5 := mem_X5[S].
+X4 := mem_X4[S].
+receive X7.
+receive S.
+T := sessionTxn[S].
+if (T = T4) then
+if (X5 = h(X4,X7)) then
+send S.
+send ok.
+nil
+else nil
+else nil
+
+Transaction T5:
+receive X8.
+receive S.
+T := sessionTxn[S].
+if (T = T5) then
 send S.
 nil
 else nil
