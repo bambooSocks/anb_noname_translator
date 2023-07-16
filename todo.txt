@@ -9,13 +9,14 @@ What did I manage:
    - store it related to agent
  - cleaned up the code and split it up more
  - implemented sigma0 sigma sigmaP
+ - agent picking
  - check ok when received
  
 
 What to do:
  - agent picking
    - if B doesn't know it's name it has to pick it for themselves
- - fuse all new declarations (Pl cannot follow after new :/ )
+ - fuse all "new" declarations (Pl cannot follow after new :/ )
  - move the write processes to the deepest point before send ...
  - deal with constants and variables (find a better way of modeling it)
  - proper testing

@@ -41,6 +41,11 @@ getAgentActionAgent (AWrite a _ _ _) = a
 getAgentActionAgent (ARelease a _ _) = a
 getAgentActionAgent (ANil) = ""
 
+getActionAgents :: Action -> [Agent]
+getActionAgents (Local agent _) = [agent]
+getActionAgents (Comm agent1 agent2 _) = [agent1, agent2]
+getActionAgents (If agent _ _ _) = [agent]
+
 msgToStr :: Msg -> String
 msgToStr (Atom x) = x
 msgToStr (Comp id args) = do

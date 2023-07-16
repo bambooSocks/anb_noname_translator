@@ -32,25 +32,17 @@ module AnBParser where
 %%
 
 anbspec :: {AST}
-: declarations algebra actions bound
+: declarations actions bound
 
 bound :: {Int}
 : "Bound" ":" int ";" {$3}
 | {0}
 
-algebra :: {[(Message,Message)]}
-: "Algebra" ":" rewriterules {$3}
-| {[]}
-
-rewriterules :: {[(Message,Message)]}
-: message "->" message ";" rewriterules {($1,$3):$5}
-| {[]}
-
-messages :: {[Message]}
+messages :: {[MSg]}
 : message "," messages {$1:$3}
 | message {[$1]}
 
-message :: {Message}
+message :: {MSg}
 : ident "(" messages ")" {Comp $1 $3}
 | ident {Var $1}
 

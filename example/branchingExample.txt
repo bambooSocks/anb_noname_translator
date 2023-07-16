@@ -1,0 +1,88 @@
+# output of the projections
+
+# in AnnB
+
+A: * X in {a, b}
+A -> B: X
+B: if X = a then
+  B -> A: ok
+  A -> B: res1
+  B -> A: ok
+else
+  B -> A: wrong
+  A -> B: res2
+  B: if X = b then
+    B -> A: ok
+  else
+    B -> A: wrong
+  end
+end
+
+# in Projections
+[
+  ("A",
+    Choice MStar "X" ["a","b"] (
+      Send (Atom "X") (
+        TxnEnd (
+          NonDetSplit (
+            Receive (Atom "ok") (
+              Send (Atom "res1") (
+                TxnEnd (
+                  Receive (Atom "ok") 
+                  Nil
+                )
+              )
+            )
+          ) (
+            Receive (Atom "wrong") (
+              Send (Atom "res2") (
+                TxnEnd (
+                  NonDetSplit (
+                    Receive (Atom "ok") 
+                    Nil
+                  ) (
+                    Receive (Atom "wrong") 
+                    Nil
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  ),("B",
+    Receive (Atom "X") (
+      If (BEq (RAtom "X") (RAtom "a")) (
+        Send (Atom "ok") (
+          TxnEnd (
+            Receive (Atom "res1") (
+              Send (Atom "ok") (
+                TxnEnd Nil
+              )
+            )
+          )
+        )
+      ) (
+        Send (Atom "wrong") (
+          TxnEnd (
+            Receive (Atom "res2") (
+              If (BEq (RAtom "X") (RAtom "b")) (
+                Send (Atom "ok") (
+                  TxnEnd 
+                  Nil
+                )
+              ) (
+                Send (Atom "wrong") (
+                  TxnEnd 
+                  Nil
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+]
+

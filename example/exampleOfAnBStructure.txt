@@ -5,6 +5,10 @@ Sigma:
   g, h/2
   private sk/2
 
+# not sure how this works?
+gamma0:
+  talk: (a,b),(a,i),(b,a)
+
 Agents:
   A, B, server
 
