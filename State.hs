@@ -6,6 +6,8 @@ import Data.Foldable (for_)
 import Data.Char (isUpper)
 import Types (Label, Msg, Agent, Marking(ToDo, Done), Frame, AgentFrames)
 
+--TODO: whole analysis could be just per agent (no need for AgentFrames)
+
 data State = State
   { counter    :: Int
   , frames     :: AgentFrames
@@ -17,6 +19,9 @@ data State = State
   , agents     :: [Agent]
   , hActors    :: [Label]
   , dActors    :: [Label]
+  , xVars      :: [String]
+  , yVars      :: [String]
+  , txnCounter :: Int
   }
   deriving (Show)
 
@@ -32,6 +37,9 @@ initialState = State
   , agents     = []
   , hActors    = []
   , dActors    = []
+  , xVars      = []
+  , yVars      = []
+  , txnCounter = 0
   }
 
 -- state monad
@@ -126,3 +134,41 @@ isAgent :: Agent -> MState Bool
 isAgent agent = do
   state <- get
   return (elem agent (agents state))
+
+getFrameForAgent :: Agent -> MState Frame
+-- helper to get a frame for a given agent
+getFrameForAgent agent = do
+  state <- get
+  let afs = (frames state)
+  return (M.findWithDefault M.empty agent afs)
+
+putFrameForAgent :: Agent -> Frame -> MState ()
+-- helper to update a frame for a given agent
+putFrameForAgent agent frame = do
+  state <- get
+  let afs = (frames state)
+  put state { frames = M.insert agent frame afs }
+
+addToXVars :: Label -> MState ()
+addToSigma0 var = do
+  state <- get
+  put state { xVars = (var:(xVars state)) }
+
+addManyToYVars :: [Label] -> MState ()
+addManyToYVars vars = do
+  state <- get
+  put state { yVars = (vars ++ (yVars state)) }
+
+clearXVars :: MState ()
+clearXVars = do
+  put state { xVars = [] }
+
+getXVars :: MState [Label]
+getXVars = do
+  state <- get
+  return (xVars state)
+
+getYVars :: MState [Label]
+getYVars = do
+  state <- get
+  return (yVars state)

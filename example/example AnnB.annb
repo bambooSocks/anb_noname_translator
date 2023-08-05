@@ -1,0 +1,26 @@
+Protocol: hello world
+
+Sigma0:
+    ok, wrong, triple/3
+
+Simga:
+    g, h/2, pk/1
+    private fresh, spent, mac/2
+
+Agents:
+    a, b, s
+    dishonest i
+
+Cells:
+    cell[N] := fresh
+
+Knowledge:
+    A: A, B, s, pk(A), inv(pk(A)), pk(B), pk(s)
+    B: A, B, s, pk(B), inv(pk(B)), pk(A), pk(s)
+    s: A, B, s, pk(s), inv(pk(s)), pk(A), pk(B)
+
+Actions:
+    A: action
+    A -> B: msg
+
+Bound: 2

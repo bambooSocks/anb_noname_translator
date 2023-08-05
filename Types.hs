@@ -5,42 +5,37 @@ module Types where
 import Data.List (intercalate)
 import qualified Data.Map as M
 
-data Action
-  = Local Agent AgentAction
-  | Comm Agent Agent Msg
-  | If Agent Formula [Action] [Action]
-  deriving (Show, Eq)
-
 data Marking
   = ToDo
   | Done
   deriving (Show, Eq)
 
 type Frame = M.Map Label (Msg, Marking)
+type Agent = String
 type AgentFrames = M.Map Agent Frame
 
--- type AST = ([Declaration], [(Message,Message)], [Action], Int)
+type Var = String -- has to start with capital
+type Const = String -- has to start with lowercase (represents function and constant names)
+type Cell = Const
 
--- data Term v f
---   = Var v
---   | Comp f [Term v f]
---   deriving (Eq, Ord, Show)
+type Label = String
 
--- type Id = String
--- type Message = Term Variable Function
+data Projection
+  = Receive Msg Projection
+  | Read Var Cell Msg Projection
+  | Choice Mode Var [Const] Projection
+  | If (Formula Msg) Projection Projection
+  | New [Var] Projection
+  | Send Msg Projection
+  | Write Cell Msg Msg Projection
+  | Release Mode (Formula Msg) Projection
+  | TxnEnd Projection
+  | TxnBegin Projection
+  | Split Projection Projection
+  | Nil
+  deriving (Show)
 
--- data Declaration
---   = Sigma0 [Sigma0Declaration]
---   | Sigma [SigmaDeclaration]
-
--- data Sigma0Declaration
---   = Agent Id
---   | AgentDomain Id [Id]
---   | Number Id
-
--- data SigmaDeclaration
---   = SNumber Id Bool
---   | Fun 
+data 
 
 data Msg
   = Atom String
@@ -48,37 +43,23 @@ data Msg
   deriving (Show, Eq)
 
 data Recipe
-  = RAtom Label
+  = RPub String
+  | RLabel Label
   | RComp String [Recipe]
   deriving (Show, Eq)
 
-type Label = String
-type Cell = String
-type Agent = String
-type CheckInfo = (Label, Recipe)
-data Check
-  = CTry CheckInfo
-  | CIf CheckInfo
-  deriving (Show)
-
-data Formula
-  = BNot Formula
-  | BAnd Formula Formula
-  | BEq Recipe Recipe -- why is this recipe?
+data Formula t
+  = BAnd (Formula t) (Formula t)
+  | BOr (Formula t) (Formula t)
+  | BNot (Formula t)
   | BTrue
-  deriving (Show, Eq)
+  | BEq t t
+  deriving(Show, Eq)
 
-data AgentAction
-  = ASend Agent Msg
-  | AReceive Agent Msg Label
-  | AIf Agent Formula [AgentAction] [AgentAction]
-  | ANew Agent [Label]
-  | APickDomain Agent Label [Label]
-  | ARead Agent Label Cell Msg
-  | AWrite Agent Cell Msg Msg
-  | ARelease Agent Mode Formula
-  | ANil
-  deriving (Show, Eq)
+data Check
+  = CTry Label Recipe
+  | CIf (Formula Recipe)
+  deriving (Show)
 
 data Mode
   = MStar
@@ -86,16 +67,16 @@ data Mode
   deriving (Show, Eq)
 
 data NNProcess
-  = PSend Msg -- send(msg)
-  | PReceive Label -- receive(label)
-  | PTry CheckInfo [NNProcess] -- try check in processes catch nil
-  | PIf Formula [NNProcess] [NNProcess] -- if formula then processes else processes
-  | PNew [Label] -- new s1,s2
-  | PPickDomain Label [Label] -- * m in {m1, m2, m3, ...}
-  | PRead Label Cell Msg -- label := cell[msg]
-  | PWrite Cell Msg Msg -- cell[msg] := msg
-  | PRelease Mode Formula -- */<> formula
-  | PNil
+  = NNSend Msg -- send(msg)
+  | NNReceive Label -- receive(label)
+  | NNTry Label Recipe [NNProcess] -- try check in processes catch nil
+  | NNIf (Formula Recipe) [NNProcess] [NNProcess] -- if formula then processes else processes
+  | NNNew [Label] -- new s1,s2
+  | NNPickDomain Label [Label] -- * m in {m1, m2, m3, ...}
+  | NNRead Label Cell Msg -- label := cell[msg]
+  | NNWrite Cell Msg Msg -- cell[msg] := msg
+  | NNRelease Mode (Formula Recipe) -- */<> formula
+  | NNNil
   deriving (Show)
 
 type NNTransaction = [NNProcess]

@@ -1,10 +1,10 @@
 module Helper where
 
 import Types (
-  Msg (Atom, Comp), Recipe (RAtom, RComp), Formula (BEq, BNot, BAnd, BTrue), Label, Agent, Action (Local, Comm, If),
-  AgentAction (AReceive, ASend, AIf, ANew, APickDomain, ARead, AWrite, ARelease, ANil),
-  NNProcess (PRead), NNCell)
-import Data.List (intercalate)
+  Msg (Atom, Comp), Recipe (RPub, RLabel, RComp), Formula (BEq, BNot, BAnd, BOr, BTrue), Label, Agent, 
+  NNProcess (NNRead), NNCell)
+import ParserModel (Action (Local, Comm, End), PProcess (PIf))
+import qualified Data.List as List
 
 extractLabel :: Maybe Label -> Label
 extractLabel (Just l) = l
@@ -17,60 +17,40 @@ extractRecipe (Nothing) = error "Could not extract recipe"
 extractRecipes :: [Maybe Recipe] -> [Recipe]
 extractRecipes mrs = map extractRecipe mrs
 
-getActionAgent :: Action -> Agent
-getActionAgent (Local agent aa) =
-  if agent == (getAgentActionAgent aa) then
-    agent
-  else error "The agents for local actions does not match with the agent action's agent"
-getActionAgent (Comm agent _ _) = agent
-getActionAgent (If agent _ _ _) = agent
-
-getAgentActionAgent :: AgentAction -> Agent
-getAgentActionAgent (ASend a _) = a
-getAgentActionAgent (AReceive a _ _) = a
-getAgentActionAgent (AIf a f as1 as2) = do
-  let agents1 = map getAgentActionAgent as1
-  let agents2 = map getAgentActionAgent as2
-  if (all (a==) agents1) && (all (a==) agents2) then
-    a
-  else error ("The agents for 'if " ++ (formulaToStr f) ++ " then' do not match")
-getAgentActionAgent (ANew a _) = a
-getAgentActionAgent (APickDomain a _ _) = a
-getAgentActionAgent (ARead a _ _ _) = a
-getAgentActionAgent (AWrite a _ _ _) = a
-getAgentActionAgent (ARelease a _ _) = a
-getAgentActionAgent (ANil) = ""
-
 getActionAgents :: Action -> [Agent]
-getActionAgents (Local agent _) = [agent]
-getActionAgents (Comm agent1 agent2 _) = [agent1, agent2]
-getActionAgents (If agent _ _ _) = [agent]
+-- get all agents related to an action
+getActionAgents (Local agent (PIf _ rest1 rest2) _) = List.nub ([agent] ++ (getActionAgents rest1) ++ (getActionAgents rest2))
+getActionAgents (Local agent _ rest) = List.nub ([agent] ++ (getActionAgents rest))
+getActionAgents (Comm agent1 agent2 _ rest) = List.nub ([agent1, agent2] ++ (getActionAgents rest))
+getActionAgents End = []
 
 msgToStr :: Msg -> String
 msgToStr (Atom x) = x
 msgToStr (Comp id args) = do
-  let argStr = intercalate "," (map msgToStr args)
+  let argStr = List.intercalate "," (map msgToStr args)
   id ++ "(" ++ argStr ++ ")"
 
-recipeToStr :: Recipe -> String
-recipeToStr (RAtom x) = x
-recipeToStr (RComp id args) = do
-  let argStr = intercalate "," (map recipeToStr args)
-  id ++ "(" ++ argStr ++ ")"
+-- recipeToStr :: Recipe -> String
+-- recipeToStr (RAtom x) = x
+-- recipeToStr (RComp id args) = do
+--   let argStr = List.intercalate "," (map recipeToStr args)
+--   id ++ "(" ++ argStr ++ ")"
 
-recipeToMsg :: Recipe -> Msg
-recipeToMsg (RAtom x) = Atom x
-recipeToMsg (RComp id args) = do
-  let mArgs = map recipeToMsg args
-  Comp id mArgs
+-- recipeToMsg :: Recipe -> Msg
+-- recipeToMsg (RAtom x) = Atom x
+-- recipeToMsg (RComp id args) = do
+--   let mArgs = map recipeToMsg args
+--   Comp id mArgs
 
-formulaToStr :: Formula -> String
+formulaToStr :: Formula Msg -> String
 formulaToStr (BAnd f1 f2) = do
-  "(" ++ (formulaToStr f1) ++ " && " ++ (formulaToStr f2) ++ ")"
+  "(" ++ (formulaToStr f1) ++ " and " ++ (formulaToStr f2) ++ ")"
+formulaToStr (BOr f1 f2) = do
+  "(" ++ (formulaToStr f1) ++ " or " ++ (formulaToStr f2) ++ ")"
 formulaToStr (BNot f) = do
   "(not " ++ (formulaToStr f) ++ ")"
-formulaToStr (BEq r1 r2) = do
-  "(" ++ (recipeToStr r1) ++ " = " ++ (recipeToStr r2) ++ ")"
+formulaToStr (BEq m1 m2) = do
+  "(" ++ (msgToStr m1) ++ " = " ++ (msgToStr m2) ++ ")"
 ormulaToStr (BTrue) = do
   "true"
 
@@ -87,4 +67,4 @@ getCellNameFromLabel label =
 
 getReadProcessFromLabels :: [Label] -> [NNProcess]
 getReadProcessFromLabels ls =
-  map (\l -> PRead l (memCellPrefix ++ l) (Atom "S")) ls
+  map (\l -> NNRead l (memCellPrefix ++ l) (Atom "S")) ls
