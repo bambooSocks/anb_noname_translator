@@ -215,10 +215,10 @@ convertAgentAction (ANil) = do
 convertAgentAction a = do
   return [PNil]
 
-getHonestAgentPicker :: Agent -> Agent -> S.MState AgentAction
-getHonestAgentPicker actingAgent pickedAgent = do
-  state <- S.get
-  return (APickDomain actingAgent pickedAgent (S.hActors state))
+-- getHonestAgentPicker :: Agent -> Agent -> S.MState AgentAction
+-- getHonestAgentPicker actingAgent pickedAgent = do
+--   state <- S.get
+--   return (APickDomain actingAgent pickedAgent (S.hActors state))
 
 getAllAgentPickers :: Agent -> [Agent] -> S.MState [AgentAction]
 getAllAgentPickers _ [] = do
@@ -228,18 +228,18 @@ getAllAgentPickers agent (a:as) = do
   aps <- getAllAgentPickers agent as
   return (ap:aps)
 
-getAllAgentPicker :: Agent -> Agent -> S.MState AgentAction
-getAllAgentPicker actingAgent pickedAgent = do
-  state <- S.get
-  return (APickDomain actingAgent pickedAgent ((S.hActors state) ++ (S.dActors state)))
+-- getAllAgentPicker :: Agent -> Agent -> S.MState AgentAction
+-- getAllAgentPicker actingAgent pickedAgent = do
+--   state <- S.get
+--   return (APickDomain actingAgent pickedAgent ((S.hActors state) ++ (S.dActors state)))
 
-insertAgentPickers :: [[AgentAction]] -> S.MState [[AgentAction]]
-insertAgentPickers ((a:as):aas) = do
-  let currentAgent = H.getAgentActionAgent a
-  agents <- S.getVariableAgents
-  hAgentPicker <- getHonestAgentPicker currentAgent currentAgent
-  dAgentPickers <- getAllAgentPickers currentAgent (agents List.\\ [currentAgent])
-  return ((a:hAgentPicker:dAgentPickers ++ as):aas)
+-- insertAgentPickers :: [[AgentAction]] -> S.MState [[AgentAction]]
+-- insertAgentPickers ((a:as):aas) = do
+--   let currentAgent = H.getAgentActionAgent a
+--   agents <- S.getVariableAgents
+--   hAgentPicker <- getHonestAgentPicker currentAgent currentAgent
+--   dAgentPickers <- getAllAgentPickers currentAgent (agents List.\\ [currentAgent])
+--   return ((a:hAgentPicker:dAgentPickers ++ as):aas)
 
 getMissingLabels :: [NNTransaction] -> [Label] -> [Label]
 getMissingLabels ts pubLabels = do

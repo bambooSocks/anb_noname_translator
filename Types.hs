@@ -30,12 +30,9 @@ data Projection
   | Write Cell Msg Msg Projection
   | Release Mode (Formula Msg) Projection
   | TxnEnd Projection
-  | TxnBegin Projection
   | Split Projection Projection
   | Nil
   deriving (Show)
-
-data 
 
 data Msg
   = Atom String
