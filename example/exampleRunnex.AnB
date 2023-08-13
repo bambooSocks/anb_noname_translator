@@ -15,7 +15,7 @@ Knowledge:
 
 Actions:
     server: * y in {yes, no}
-    if y = yes then
+    server: if y = yes then
         server: new N1, N2
         server -> X: crypt(pk(X),pair(yes,N1),N2)
     else

@@ -55,6 +55,11 @@ getProjection ag (Local ag' (PIf f rest1 rest2) End) =
     let subProj1 = getProjection ag rest1
     let subProj2 = getProjection ag rest2
     Split subProj1 subProj2
+getProjection ag (Comm ag1 ag2 m End) =
+  if ag == ag1 then do
+    Send m Nil
+  else
+    Nil
 getProjection ag (Comm ag1 ag2 m rest) =
   if ag == ag1 then do
     let subProj = getProjection ag rest
@@ -203,9 +208,12 @@ analyze l msg@(Comp "inv" (pk:[])) s = do
 -- default decomposition
 analyze l msg s = do --TODO: verify this works TEST ME!!!!
   let rs = compose msg s
-  let ifChecks = map (\(a,b) -> CIf (BEq a b)) (getAllRecipePairs rs)
-  let s1 = S.register msg Done l s
-  (ifChecks, s1)
+  if rs /= [] then do
+    let ifChecks = map (\(a,b) -> CIf (BEq a b)) (getAllRecipePairs rs)
+    let s1 = S.register msg Done l s --TODO: mark all instances as 
+    (ifChecks, s1)
+  else
+    ([], s)
   
 convertCheck :: Check -> Process -> Process
 -- convert checks into processes
@@ -219,6 +227,17 @@ endTxn ag [] tn p = do
   NWrite ("__INT_STEP_" ++ ag) (RPub "S") (RPub tn) (NSend (RPub "S") p)
 endTxn ag (x:xs) tn p = do
   NWrite ("__INT_MEM_" ++ x) (RPub "S") (RLabel x) (endTxn ag xs tn p)
+
+startTxn :: Agent -> [Label] -> String -> Process -> Process
+startTxn ag ys tn p = do
+  NReceive "S" (
+    NRead "__INT_STEP" ("__INT_STEP_" ++ ag) (RPub "S") (
+      NIf (BEq (RLabel "__INT_STEP") (RPub tn)) (
+        readAll ys p) NNil))
+
+readAll :: [Label] -> Process -> Process
+readAll [] p = p
+readAll (y:ys) p = NRead y ("__INT_MEM_" ++ y) (RPub "S") p
 
 data Process
   = NReceive Label Process -- receive(label)
@@ -234,13 +253,13 @@ data Process
   | NBreak Process Process
   deriving (Show)
 
--- initTranslate :: Agent -> Projection -> S.MState Process
--- initTranslate ag p = do
---   -- set state for step counter to 0
---   -- generate agent picking code
---   -- create S
---   let lp = Choice 
---   translate ag p
+initTranslate :: Agent -> Projection -> S.State -> Process
+initTranslate ag p = do
+  -- set state for step counter to 0
+  -- generate agent picking code
+  -- create S
+  let lp = Choice 
+  translate ag p
 
 translate :: Agent -> Projection -> S.State -> Process
 translate ag (Receive m r) s = do
@@ -282,15 +301,17 @@ translate ag (Release m f r) s = do
 translate ag (TxnEnd (Split r1 r2)) s = do
   let xs = S.xVars s
   let (tn, s1) = S.freshTxnName ag s
-  let s2 = s1 { S.xVars = [], S.yVars = ((S.yVars s1) ++ xs) }
-  let p1 = translate ag r1 s2
-  let p2 = translate ag r2 s2
+  let ys = (S.yVars s1) ++ xs
+  let s2 = s1 { S.xVars = [], S.yVars = ys }
+  let p1 = startTxn ag ys tn (translate ag r1 s2)
+  let p2 = startTxn ag ys tn (translate ag r2 s2)
   endTxn ag xs tn (NBreak p1 p2)
 translate ag (TxnEnd r) s = do
   let xs = S.xVars s
   let (tn, s1) = S.freshTxnName ag s
-  let s2 = s1 { S.xVars = [], S.yVars = ((S.yVars s1) ++ xs) }
-  let p = translate ag r s2
+  let ys = (S.yVars s1) ++ xs
+  let s2 = s1 { S.xVars = [], S.yVars = ys }
+  let p = startTxn ag ys tn (translate ag r s2)
   endTxn ag (S.xVars s) tn (NBreak p NNil)
 translate ag Nil _ = NNil
 
@@ -354,7 +375,7 @@ main = do
   let actions = Local "A" (PChoice MStar "X" ["a", "b"]) (Comm "A" "B" (Atom "X") (Local "B" (PIf (BEq (Atom "X") (Atom "a")) (Comm "B" "A" (Atom "ok") (Comm "A" "B" (Atom "res1") (Comm "B" "A" (Atom "ok") End))) (Comm "B" "A" (Atom "wrong") (Comm "A" "B" (Atom "res2") (Local "B" (PIf (BEq (Atom "X") (Atom "b")) (Comm "B" "A" (Atom "ok") End) (Comm "B" "A" (Atom "wrong") End)) End)))) End))
   
   let projs = actionsToProjs actions
-  let (ag,proj):_ = projs
+  let _:(ag,proj):_ = projs
 
   -- putStrLn $ show proj
 

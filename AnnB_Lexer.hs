@@ -17111,7 +17111,7 @@ alex_actions = array (0 :: Int, 109)
   , (54,alex_action_38)
   , (53,alex_action_38)
   , (52,alex_action_38)
-  , (51,alex_action_40)
+  , (51,alex_action_39)
   , (50,alex_action_38)
   , (49,alex_action_38)
   , (48,alex_action_38)
@@ -17165,11 +17165,10 @@ alex_actions = array (0 :: Int, 109)
   , (0,alex_action_17)
   ]
 
-{-# LINE 56 "AnnB_Lexer.x" #-}
+{-# LINE 55 "AnnB_Lexer.x" #-}
 data Token
    = TCONST AlexPosn String
    | TVAR AlexPosn String
-   | TIDENT AlexPosn String
    | TINT AlexPosn Int
    | TOPENP AlexPosn
    | TCLOSEP AlexPosn
@@ -17284,8 +17283,7 @@ alex_action_35 = (\ p s -> TNOT p)
 alex_action_36 = (\ p s -> TOR p)
 alex_action_37 = (\ p s -> TCONST p s)
 alex_action_38 = (\ p s -> TVAR p s)
-alex_action_39 = (\ p s -> TIDENT p s)
-alex_action_40 = (\ p s -> TINT p (read s))
+alex_action_39 = (\ p s -> TINT p (read s))
 
 #define ALEX_NOPRED 1
 -- -----------------------------------------------------------------------------

@@ -15,6 +15,34 @@ Actions:
   Comm "B" "A" (Atom "ok")
 ]
 
+[
+  Local "A" (APickDomain "x" ["a", "b"]), 
+  Comm "A" "B" (Atom "x"),
+  If "B" (BEq (RAtom "x") (RAtom "a")) [
+    Comm "B" "A" (Atom "ok")
+  ] [
+    Comm "B" "A" (Atom "wrong")
+  ]
+]
+
+[
+    [
+        ANew "A" ["S"],
+        APickDomain "A" "x" ["a","b"],
+        ASend "A" (Atom "x"),
+        ANil
+    ],[
+        AIf "B" (BEq (RAtom "x") (RAtom "a")) 
+        [
+            ASend "B" (Atom "ok"),
+            ANil
+        ] [
+            ASend "B" (Atom "wrong"),
+            ANil
+        ],
+        AReceive "B" (Atom "x") "T2",
+        ANil
+        ]]
 
 GENERATED CODE:
 

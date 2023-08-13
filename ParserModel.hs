@@ -9,10 +9,12 @@ type Def = (String,Int)
 data SigmaDef
   = Public [Def]
   | Private [Def]
+  deriving (Show, Eq)
 
 data AgentDef
   = Honest [Agent]
   | Dishonest [Agent]
+  deriving (Show, Eq)
 
 type Knowledge = (String, [Msg])
 

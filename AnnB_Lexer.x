@@ -50,7 +50,6 @@ tokens :-
   "or"                { (\ p s -> TOR p) }
   $alphaL $identChar* { (\ p s -> TCONST p s) }
   $alphaU $identChar* { (\ p s -> TVAR p s) }
-  $alpha $identChar*  { (\ p s -> TIDENT p s) }
   $digit+             { (\ p s -> TINT p (read s)) }
 
 {
@@ -58,7 +57,6 @@ tokens :-
   data Token
    = TCONST AlexPosn String
    | TVAR AlexPosn String
-   | TIDENT AlexPosn String
    | TINT AlexPosn Int
    | TOPENP AlexPosn
    | TCLOSEP AlexPosn

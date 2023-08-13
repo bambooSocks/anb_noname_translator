@@ -78,3 +78,4 @@ data NNProcess
 
 type NNTransaction = [NNProcess]
 type NNCell = (Cell, Msg, Msg)
+type NNDef = (String, Int)

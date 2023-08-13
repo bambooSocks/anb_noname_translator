@@ -12,7 +12,6 @@ import ParserModel
 %token
   const         { TCONST _ $$ }
   var           { TVAR _ $$ }
-  ident         { TIDENT _ $$ }
   int           { TINT _ $$ }
   "("           { TOPENP _ }
   ")"           { TCLOSEP _ }
@@ -63,21 +62,25 @@ annbspec :: {AnnB}
   "Bound" ":" int
   { ($3,$4,$5,$8,$11,$12,$15,$18) }
 
-sigma0 :: {[Defs]}
+sigma0 :: {[Def]}
 : "Sigma0" ":" defs {$3}
 | {[]}
 
-sigma : {[SigmaDef]}
+sigma :: {[SigmaDef]}
 : "Sigma" ":" sigmaDefs {$3}
 | {[]}
 
-cells : {[CellDef]}
-: "Cells" ":" cells
+cells :: {[CellDef]}
+: "Cells" ":" cellDefs {$3}
 | {[]}
 
 defs :: {[Def]}
-: const "/" int "," defs { ($1, $3):$5}
-| const "/" int {[($1, $3)]}
+: def "," defs { $1:$3 }
+| def {[$1]}
+
+def :: {Def}
+: const "/" int {($1,$3)}
+| const {($1, 0)}
 
 sigmaDefs :: {[SigmaDef]}
 : defs sigmaDefs { (Public $1):$2 }
@@ -100,13 +103,18 @@ messages :: {[Msg]}
 message :: {Msg}
 : const "(" messages ")" {Comp $1 $3}
 | const {Atom $1}
+| var {Atom $1}
 
 knowledges :: {[Knowledge]}
 : ident ":" messages knowledges { ($1,$3):$4}
 | ident ":" messages {[($1,$3)]}
 
+ident :: {String}
+: const {$1}
+| var {$1}
+
 cellDefs :: {[CellDef]}
-: const "[" message "]" ":=" message cells { ($1, $3, $6):$7}
+: const "[" message "]" ":=" message cellDefs { ($1, $3, $6):$7}
 | const "[" message "]" ":=" message {[($1, $3, $6)]}
 
 actions :: {Action}
@@ -144,6 +152,12 @@ process :: {PProcess}
 {
 
 parseError :: [Token] -> a
-parseError _ = error "Parse error"
+parseError tks = error ("AnnB Parse error at " ++ lcn ++ "\n" )
+	where
+	lcn = case tks of
+		  [] -> "end of file"
+		  tk:_ -> "line " ++ show l ++ ", column " ++ show c ++ " - Token: " ++ show tk
+			where
+			AlexPn _ l c = tokenPosn tk
 
 }
