@@ -2,7 +2,6 @@
 module AnnB_Parser where
 import AnnB_Lexer
 import Types
-import ParserModel
 import qualified Data.Array as Happy_Data_Array
 import qualified Data.Bits as Bits
 import Control.Applicative(Applicative(..))
@@ -1221,7 +1220,7 @@ happySeq = happyDontSeq
 parseError :: [Token] -> a
 parseError tks = error ("AnnB Parse error at " ++ lcn ++ "\n" )
 	where
-	lcn = 	case tks of
+	lcn = case tks of
 		  [] -> "end of file"
 		  tk:_ -> "line " ++ show l ++ ", column " ++ show c ++ " - Token: " ++ show tk
 			where

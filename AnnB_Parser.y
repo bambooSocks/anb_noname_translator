@@ -2,7 +2,6 @@
 module AnnB_Parser where
 import AnnB_Lexer
 import Types
-import ParserModel
 }
 
 %name parseAnnB

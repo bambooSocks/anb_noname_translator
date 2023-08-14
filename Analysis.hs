@@ -290,9 +290,9 @@ convert ((ag, pr):aprs) h kns = do
 initTranslate :: Agent -> Projection -> S.Header -> [Msg] -> Process
 initTranslate ag pr h kn = do
   let s = S.addInitialState h kn S.initialState
-  let (p, _) = translate ag pr s 1
-
-  p
+  let (chs, s1) = analyzeToDo s
+  let (p, _) = translate ag pr s1 0
+  foldr convertCheck p chs
   -- TODO: generate agent picking code
   -- TODO: create S
 
