@@ -4,16 +4,27 @@ import qualified Control.Monad.Trans.State as ST
 import qualified Data.Map as Map
 import Data.Foldable (for_)
 import Data.Char (isUpper)
-import Types (Label, Msg, Agent, Marking(ToDo, Done), Frame, AgentFrames)
+import Types (Label, Msg, Agent, Marking(ToDo, Done), Frame, Def, SigmaDef (Public, Private), AgentDef (Honest, Dishonest))
 
 data Header = Header
-  { sigma0     :: [(String, Int)]
-  , sigma      :: [(String, Int)]
-  , sigmaPriv  :: [(String, Int)]
-  , agents     :: [String]
-  , agentsDish :: [String]
+  { s0    :: [Def]
+  , sPub  :: [Def]
+  , sPriv :: [Def]
+  , hAgs  :: [Agent]
+  , dAgs  :: [Agent]
   }
   deriving(Show)
+
+getHeader :: [Def] -> [SigmaDef] -> [AgentDef] -> Header
+getHeader sig0 sig ags = do
+  let (sPub, sPriv) = splitSigmaDef sig ([],[])
+  let (hAgs, dAgs) = splitAgentDef ags ([],[])
+  Header { s0    = sig0
+  , sPub  = sPub
+  , sPriv = sPriv
+  , hAgs  = hAgs
+  , dAgs  = dAgs
+  }
 
 data State = State
   { counter    :: Int
@@ -35,22 +46,33 @@ initialState = State
   , yVars      = []
   }
 
+splitSigmaDef :: [SigmaDef] -> ([Def], [Def]) -> ([Def], [Def])
+splitSigmaDef [] (sPub, sPriv) =
+  (sPub, sPriv)
+splitSigmaDef ((Public d):sds) (sPub, sPriv) =
+  (sPub ++ d, sPriv)
+splitSigmaDef ((Private d):sds) (sPub, sPriv) =
+  (sPub, sPriv ++ d)
+
+splitAgentDef :: [AgentDef] -> ([Agent], [Agent]) -> ([Agent], [Agent])
+splitAgentDef [] (hAgs, dAgs) =
+  (hAgs, dAgs)
+splitAgentDef ((Honest a):ads) (hAgs, dAgs) = 
+  (hAgs ++ a, dAgs)
+splitAgentDef ((Dishonest a):ads) (hAgs, dAgs) = 
+  (hAgs, dAgs ++ a)
 
 isPublicId :: String -> Int -> State -> Bool
 -- check whether the identifier is public with correct arity
 isPublicId id arity s = do
   any (\(i,a) -> i == id && a == arity) (pubFunc s)
 
-freshLabel :: Int -> Label
--- generate a fresh label
-freshLabel i = "X" ++ show i
-
-freshTxnName :: Agent -> State -> (String, State)
--- generate a fresh label
-freshTxnName ag s = do
-  let i = txnCounter s
-  let label = ag ++ "_" ++ show i
-  (label, (s { txnCounter = i + 1 }))
+freshLabel :: State -> (Label, State)
+ -- generate a fresh label
+freshLabel s = do
+  let i = counter s
+  let label = "X" ++ show i
+  (label, (s { counter = i + 1 }))
 
 register :: Msg -> Marking -> Label -> State -> State
 -- register a new label and corresponding message in the frame
@@ -78,8 +100,8 @@ registerManyFresh (msg:msgs) marking s = do
 addInitialState :: Header -> [Msg] -> State -> State
 addInitialState h msgs s = do
   let (_, s1) = registerManyFresh msgs ToDo s
-  let ags = map (\a -> (a, 0)) ((agents h) ++ (agentsDish h))
-  s1 { pubFunc = ((sigma0 h) ++ (sigma h) ++ ags ++ (pubFunc s1)) }
+  let ags = map (\a -> (a, 0)) ((hAgs h) ++ (dAgs h))
+  s1 { pubFunc = ((s0 h) ++ (sPub h) ++ ags ++ (pubFunc s1)) }
 
 addToXVars :: Label -> State -> State
 addToXVars var s =

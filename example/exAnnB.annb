@@ -1,7 +1,7 @@
 Protocol: HelloWorld
 
 Sigma0:
-    ok, wrong, triple/3
+    ok, wrong, triple/3, c, d, res1, res2
 
 Sigma:
     g, h/2, pk/1
@@ -20,7 +20,20 @@ Cells:
     cell[N] := fresh
 
 Actions:
-    A: new Msg
-    A -> B: Msg
+    A: * X in {c, d}
+    A -> B: X
+    B: if X = c then
+      B -> A: ok
+      A -> B: res1
+      B -> A: ok
+    else
+      B -> A: wrong
+      A -> B: res2
+      B: if X = d then
+        B -> A: ok
+      else
+        B -> A: wrong
+      end
+    end
 
 Bound: 2
