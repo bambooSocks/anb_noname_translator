@@ -1,19 +1,10 @@
-again what do I do:
-- finish analysis !!!!!
-- update the translation function !!!!
-- start with translation function !!!!
-- update the parser so that all sections are not required !!
-- update the ident to not come from lexer but as a var const fusion !!
-- generate translated code !
- 
-
-What to do:
+TODO:
+ - rename the labels in each transaction
+ - generate necessary cell definitions
+ - add agent names to sigma0
  - agent picking
    - if B doesn't know it's name it has to pick it for themselves
  - fuse all "new" declarations (Pl cannot follow after new :/ )
  - proper testing
  - in verbatim code
-
-Extra:
- - merge registers
 

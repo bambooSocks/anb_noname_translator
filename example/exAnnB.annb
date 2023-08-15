@@ -1,20 +1,19 @@
 Protocol: HelloWorld
 
 Sigma0:
-    ok, wrong, triple/3, c, d, res1, res2
+    ok, wrong, res1, res2, c, d
 
 Sigma:
-    g, h/2, pk/1
-    private fresh, spent, mac/2
+    pk/1
+    private fresh
 
 Agents:
-    a, b, s
+    a, b
     dishonest i
 
 Knowledge:
-    A: A, B, s, pk(A), inv(pk(A)), pk(B), pk(s)
-    B: A, B, s, pk(B), inv(pk(B)), pk(A), pk(s)
-    s: A, B, s, pk(s), inv(pk(s)), pk(A), pk(B)
+    A: A, B, pk(A), inv(pk(A)), pk(B)
+    B: A, B, pk(B), inv(pk(B)), pk(A)
 
 Cells:
     cell[N] := fresh

@@ -50,17 +50,17 @@ splitSigmaDef :: [SigmaDef] -> ([Def], [Def]) -> ([Def], [Def])
 splitSigmaDef [] (sPub, sPriv) =
   (sPub, sPriv)
 splitSigmaDef ((Public d):sds) (sPub, sPriv) =
-  (sPub ++ d, sPriv)
+  splitSigmaDef sds (sPub ++ d, sPriv)
 splitSigmaDef ((Private d):sds) (sPub, sPriv) =
-  (sPub, sPriv ++ d)
+  splitSigmaDef sds (sPub, sPriv ++ d)
 
 splitAgentDef :: [AgentDef] -> ([Agent], [Agent]) -> ([Agent], [Agent])
 splitAgentDef [] (hAgs, dAgs) =
   (hAgs, dAgs)
 splitAgentDef ((Honest a):ads) (hAgs, dAgs) = 
-  (hAgs ++ a, dAgs)
+  splitAgentDef ads (hAgs ++ a, dAgs)
 splitAgentDef ((Dishonest a):ads) (hAgs, dAgs) = 
-  (hAgs, dAgs ++ a)
+  splitAgentDef ads (hAgs, dAgs ++ a)
 
 isPublicId :: String -> Int -> State -> Bool
 -- check whether the identifier is public with correct arity

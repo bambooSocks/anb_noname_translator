@@ -1,6 +1,6 @@
 module Analysis where
 
-import Types (Msg (Atom, Comp), Agent, Recipe (RPub, RLabel, RComp), Action (Local, Comm, End), PProcess(PNew, PChoice, PIf, PRead, PRelease, PWrite), 
+import Types (Msg (Atom, Comp), Agent, Recipe (RPub, RLabel, RComp), Action (Local, Comm, End), PProcess(PNew, PChoice, PIf, PRead, PRelease, PWrite), Mode (MStar),
               Projection (Receive, Send, New, Choice, Read, Write, Release, If, Split, TxnEnd, Nil), Formula (BEq, BAnd, BNot, BTrue), Check (CTry, CIf),
               Process (NReceive, NTry, NIf, NChoice, NRead, NNew, NSend, NWrite, NRelease, NNil, NBreak),Knowledge, Label, CellDef, Marking (Done, ToDo))
 import qualified Helper as H
@@ -261,38 +261,19 @@ convert ((ag, pr):aprs) h kns = do
   let ps = convert aprs h kns
   (pp ++ ps)
 
--- getHonestAgentPicker :: Agent -> Agent -> S.MState AgentAction
--- getHonestAgentPicker actingAgent pickedAgent = do
---   state <- S.get
---   return (APickDomain actingAgent pickedAgent (S.hActors state))
+getHonestAgentChoice :: Agent -> S.Header -> Process -> Process
+getHonestAgentChoice ag h r = NChoice MStar ag (S.hAgs h) r
 
--- getAllAgentPickers :: Agent -> [Agent] -> S.MState [AgentAction]
--- getAllAgentPickers _ [] = do
---   return []
--- getAllAgentPickers agent (a:as) = do
---   ap <- getAllAgentPicker agent a
---   aps <- getAllAgentPickers agent as
---   return (ap:aps)
-
--- getAllAgentPicker :: Agent -> Agent -> S.MState AgentAction
--- getAllAgentPicker actingAgent pickedAgent = do
---   state <- S.get
---   return (APickDomain actingAgent pickedAgent ((S.hActors state) ++ (S.dActors state)))
-
--- insertAgentPickers :: [[AgentAction]] -> S.MState [[AgentAction]]
--- insertAgentPickers ((a:as):aas) = do
---   let currentAgent = H.getAgentActionAgent a
---   agents <- S.getVariableAgents
---   hAgentPicker <- getHonestAgentPicker currentAgent currentAgent
---   dAgentPickers <- getAllAgentPickers currentAgent (agents List.\\ [currentAgent])
---   return ((a:hAgentPicker:dAgentPickers ++ as):aas)
+getAllAgentChoice :: Agent -> S.Header -> Process -> Process
+getAllAgentChoice ag h r = NChoice MStar ag ((S.hAgs h) ++ (S.dAgs h)) r
 
 initTranslate :: Agent -> Projection -> S.Header -> [Msg] -> Process
 initTranslate ag pr h kn = do
   let s = S.addInitialState ag h kn S.initialState
   let (chs, s1) = analyzeToDo ag s
   let (p, _) = translate ag pr s1 0
-  foldr convertCheck p chs
+  let checked = foldr convertCheck p chs
+  getHonestAgentChoice ag h checked
   -- TODO: generate agent picking code
   -- TODO: create S
 
