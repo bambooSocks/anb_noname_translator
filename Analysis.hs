@@ -148,6 +148,7 @@ getAllRecipePairs l rs = do
   map (\r -> (label, r)) (filter (label /=) rs)
 
 setAllLabelsDone :: [Recipe] -> Msg -> S.State -> S.State
+-- re-register all labels with Done marking
 setAllLabelsDone [] _ s = s
 setAllLabelsDone ((RLabel l):rs) msg s = do
   let s1 = setAllLabelsDone rs msg s
@@ -236,6 +237,7 @@ endTxn ag (x:xs) tn p = do
   NWrite ("__MEM_" ++ x) (RPub "__SID") (RLabel x) (endTxn ag xs tn p)
 
 startTxn :: Agent -> [Label] -> Int -> Process -> Process
+-- create the starting processes of a transaction
 startTxn ag ys tn p = do
   NReceive "__SID" (
     NRead "__STEP" ("__STEP_" ++ ag) (RPub "__SID") (
@@ -243,16 +245,19 @@ startTxn ag ys tn p = do
         readAll ys p) NNil))
 
 readAll :: [Label] -> Process -> Process
+-- create the read processes for beginning of a transaction
 readAll [] p = p
 readAll (y:ys) p = NRead y ("__MEM_" ++ y) (RPub "__SID") p
 
 getAgentKnowledge :: Agent -> [Knowledge] -> [Msg]
+-- find the agent's knowledge
 getAgentKnowledge ag kns =
   case (List.find (\(a,_) -> a == ag) kns) of
     Just (_, msgs) -> msgs
     Nothing -> error ("Couldn't find knowledge for agent: " ++ ag)
 
 convert :: [(Agent, Projection)] -> S.Header -> [Knowledge] -> [Process]
+-- convert agent related projections to processes
 convert [] _ _ = []
 convert ((ag, pr):aprs) h kns = do
   let kn = getAgentKnowledge ag kns
@@ -262,12 +267,15 @@ convert ((ag, pr):aprs) h kns = do
   (pp ++ ps)
 
 getHonestAgentChoice :: Agent -> S.Header -> Process -> Process
+-- get a choice process for picking an honest agent
 getHonestAgentChoice ag h r = NChoice MStar ag (S.hAgs h) r
 
 getAllAgentChoice :: Agent -> S.Header -> Process -> Process
+-- get a choice process for picking any agent
 getAllAgentChoice ag h r = NChoice MStar ag ((S.hAgs h) ++ (S.dAgs h)) r
 
 initTranslate :: Agent -> Projection -> S.Header -> [Msg] -> Process
+-- initialize a translation of a projection into a process chain
 initTranslate ag pr h kn = do
   let s = S.addInitialState ag h kn S.initialState
   let (chs, s1) = analyzeToDo ag s
@@ -278,6 +286,7 @@ initTranslate ag pr h kn = do
   -- TODO: create S
 
 translate :: Agent -> Projection -> S.State -> Int -> (Process, Int)
+-- translate a projection into a process chain
 translate ag (Receive m r) s tn = do
   let (x, s1) = S.registerFresh ag m ToDo s
   let (chs, s2) = analyzeToDo ag s1
@@ -341,6 +350,7 @@ translate ag (TxnEnd r) s tn =
 translate ag Nil _ tn = (NNil, tn)
 
 prepStateForBreak :: Int -> S.State -> (S.State, Int, [String], [String])
+-- reset a state for new transaction
 prepStateForBreak tn s = do
   let xs = S.xVars s
   let newTn = tn + 1
@@ -349,6 +359,7 @@ prepStateForBreak tn s = do
   (s1, newTn, xs, ys)
 
 breakTxn :: Process -> (Process, [Process])
+-- break process chain into one transaction and the test of the chain
 breakTxn (NReceive l p) = do
   let (p', rest) = breakTxn p
   (NReceive l p', rest)
@@ -388,6 +399,7 @@ breakTxn (NBreak p1 p2) =
   (NNil, [p1, p2])
 
 breakProcess :: Process -> [Process]
+-- break a process chain into tranactions 
 breakProcess p = do
   let (p', rest) = breakTxn p
   p':(concatMap breakProcess rest)
