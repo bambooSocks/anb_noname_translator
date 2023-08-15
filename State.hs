@@ -67,11 +67,11 @@ isPublicId :: String -> Int -> State -> Bool
 isPublicId id arity s = do
   any (\(i,a) -> i == id && a == arity) (pubFunc s)
 
-freshLabel :: State -> (Label, State)
+freshLabel :: Agent -> State -> (Label, State)
  -- generate a fresh label
-freshLabel s = do
+freshLabel ag s = do
   let i = counter s
-  let label = "X" ++ show i
+  let label = ag ++ "_X" ++ show i
   (label, (s { counter = i + 1 }))
 
 register :: Msg -> Marking -> Label -> State -> State
@@ -80,26 +80,26 @@ register msg marking label s = do
   let newFrame = Map.insert label (msg, marking) (frame s)
   s { frame = newFrame }
 
-registerFresh :: Msg -> Marking -> State -> (Label, State)
+registerFresh :: Agent -> Msg -> Marking -> State -> (Label, State)
 -- generate a new label and register message with given marking
-registerFresh msg marking s = do
-  let (label, s1) = freshLabel s
+registerFresh ag msg marking s = do
+  let (label, s1) = freshLabel ag s
   let s2 = register msg marking label s1
   (label, s2)
 
-registerManyFresh :: [Msg] -> Marking -> State -> ([Label], State)
+registerManyFresh :: Agent -> [Msg] -> Marking -> State -> ([Label], State)
 -- generate a new label and register message with given marking
-registerManyFresh [] _ s =
+registerManyFresh _ [] _ s =
   ([], s)
-registerManyFresh (msg:msgs) marking s = do
-  let (label, s1) = freshLabel s
+registerManyFresh ag (msg:msgs) marking s = do
+  let (label, s1) = freshLabel ag s
   let s2 = register msg marking label s1
-  let (rest, s3) = registerManyFresh msgs marking s2
+  let (rest, s3) = registerManyFresh ag msgs marking s2
   (label:rest, s3)
 
-addInitialState :: Header -> [Msg] -> State -> State
-addInitialState h msgs s = do
-  let (_, s1) = registerManyFresh msgs ToDo s
+addInitialState :: Agent -> Header -> [Msg] -> State -> State
+addInitialState ag h msgs s = do
+  let (_, s1) = registerManyFresh ag msgs ToDo s
   let ags = map (\a -> (a, 0)) ((hAgs h) ++ (dAgs h))
   s1 { pubFunc = ((s0 h) ++ (sPub h) ++ ags ++ (pubFunc s1)) }
 

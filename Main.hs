@@ -28,7 +28,7 @@ main = do
       let (name, sig0, sig, ags, kn, cells, actions, bound) = AP.parseAnnB tokens -- TODO: analyze that cells used do exist????
       let header = S.getHeader sig0 sig ags
       let projs = A.actionsToProjs actions
-      putStrLn $ show projs
+      -- putStrLn $ show projs
       let transactions = A.convert projs header kn
       let nn = G.generate header cells transactions bound
       putStrLn nn
