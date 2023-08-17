@@ -39,6 +39,7 @@ import Types
   "Sigma"       { TSIGMA _ }
   "Cells"       { TCELLS _ }
   "Agents"      { TAGENTS _ }
+  "Roles"       { TROLES _ }
   "Knowledge"   { TKNOWLEDGE _ }
   "Actions"	    { TACIONS _ }
   "Bound"       { TBOUND _ }
@@ -55,11 +56,12 @@ annbspec :: {AnnB}
   sigma0
   sigma
   "Agents" ":" agents
+  "Roles" ":" roles
   "Knowledge" ":" knowledges
   cells
   "Actions" ":" actions
   "Bound" ":" int
-  { ($3,$4,$5,$8,$11,$12,$15,$18) }
+  { ($3,$4,$5,$8,$11,$14,$15,$18,$21) }
 
 sigma0 :: {[Def]}
 : "Sigma0" ":" defs {$3}
@@ -93,6 +95,10 @@ consts :: {[String]}
 agents :: {[AgentDef]}
 : consts agents { (Honest $1):$2 }
 | "dishonest" consts agents { (Dishonest $2):$3 }
+| {[]}
+
+roles :: {[RoleDef]}
+: var ":" consts roles {($1,$3):$4}
 | {[]}
 
 messages :: {[Msg]}

@@ -33,7 +33,7 @@ generateCells :: [CellDef] -> String
 -- generate NN code for cell section
 generateCells cells = do
   let cellsStr = List.intercalate "\n" (map generateCell cells)
-  "Cells:\n" ++ cellsStr ++ "\n\n"
+  if cellsStr == "" then "" else "Cells:\n" ++ cellsStr ++ "\n\n"
 
 generateCell :: CellDef -> String
 -- generate NN code for cell definition

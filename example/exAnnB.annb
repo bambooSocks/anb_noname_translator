@@ -11,6 +11,10 @@ Agents:
     a, b
     dishonest i
 
+Roles:
+    A: a, b
+    B: a, b, i
+
 Knowledge:
     A: A, B, pk(A), inv(pk(A)), pk(B)
     B: A, B, pk(B), inv(pk(B)), pk(A)

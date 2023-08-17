@@ -1,0 +1,26 @@
+Protocol: BasicHash
+
+Sigma0:
+    ok
+
+Sigma:
+    pk/1, h/2
+    private sk/1
+
+Agents:
+    t1, t2, t3, r
+    dishonest i
+
+Roles:
+    A: t1, t2, t3, i
+
+Knowledge:
+    A: A, r, sk(A)
+    r: inv(pk(r)), sk(t1), sk(t2), sk(t3), sk(i)
+
+Actions:
+    A: new N
+    A -> r: crypt(pk(r), pair(N,h(sk(A),N)), N)
+    r -> A: ok
+
+Bound: 4

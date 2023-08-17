@@ -36,7 +36,7 @@ data Mode
   deriving (Show, Eq)
 
 -- Parser model
-type AnnB = (String, [Def], [SigmaDef], [AgentDef], [Knowledge], [CellDef], Action, Int)
+type AnnB = (String, [Def], [SigmaDef], [AgentDef], [RoleDef], [Knowledge], [CellDef], Action, Int)
 
 type Def = (String,Int)
 
@@ -50,9 +50,9 @@ data AgentDef
   | Dishonest [Agent]
   deriving (Show, Eq)
 
-type Knowledge = (String, [Msg])
+type RoleDef = (Agent, [Agent])
 
--- TODO: add in verbatim transactions
+type Knowledge = (String, [Msg])
 
 type CellDef = (Cell, Msg, Msg)
 

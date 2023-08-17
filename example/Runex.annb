@@ -1,0 +1,30 @@
+Protocol: Runex
+
+Sigma0:
+    yes, no
+
+Sigma:
+    pk/1
+
+Agents:
+    a, b, c, s
+
+Roles:
+    A: a, b, c
+
+Knowledge:
+    a: inv(pk(a))
+    s: A
+
+Actions:
+    a -> s: inv(pk(a))
+    s: * Y in {yes, no}
+    s: if Y = yes then
+        s: new N1, N2
+        s -> A: crypt(pk(A), pair(yes, N1), N2)
+    else
+        s: new N2
+        s -> A: crypt(pk(A), no, N2)
+    end
+
+Bound: 4

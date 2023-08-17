@@ -1,0 +1,107 @@
+Sigma0:
+  public ok/0 wrong/0 res1/0 res2/0 c/0 d/0 intFRESH/0 intB2/0 intB1/0 intA1/0 a/0 b/0 i/0
+Sigma:
+  public pk/1
+  private fresh/0
+
+Cells:
+intSTEP_B[intSID] := intFRESH
+intMEM_X6[intSID] := intFRESH
+intMEM_X7[intSID] := intFRESH
+intMEM_X8[intSID] := intFRESH
+intSTEP_A[intSID] := intFRESH
+intMEM_X1[intSID] := intFRESH
+intMEM_X2[intSID] := intFRESH
+intMEM_X3[intSID] := intFRESH
+cell[N] := fresh
+
+Transaction T1:
+new intSID.
+send intSID.
+nil
+
+Transaction T2:
+receive intSID.
+* X1 in {a,b}.
+* X2 in {a,b,i}.
+* X3 in {c,d}.
+send X3.
+intMEM_X3[intSID] := X3.
+intMEM_X2[intSID] := X2.
+intMEM_X1[intSID] := X1.
+intSTEP_A[intSID] := intA1.
+send intSID.
+nil
+
+Transaction T3:
+receive intSID.
+intSTEP := intSTEP_A[intSID].
+if (intSTEP = intA1) then
+X3 := intMEM_X3[intSID].
+receive X4.
+if (X4 = ok) then
+send res1.
+nil
+else nil
+else nil
+
+Transaction T4:
+receive intSID.
+intSTEP := intSTEP_A[intSID].
+if (intSTEP = intA1) then
+X3 := intMEM_X3[intSID].
+receive X5.
+if (X5 = wrong) then
+send res2.
+nil
+else nil
+else nil
+
+Transaction T5:
+* X6 in {a,b}.
+* X7 in {a,b,i}.
+receive X8.
+if (X8 = c) then
+send ok.
+intMEM_X8[intSID] := X8.
+intMEM_X7[intSID] := X7.
+intMEM_X6[intSID] := X6.
+intSTEP_B[intSID] := intB1.
+send intSID.
+nil
+else send wrong.
+intMEM_X8[intSID] := X8.
+intMEM_X7[intSID] := X7.
+intMEM_X6[intSID] := X6.
+intSTEP_B[intSID] := intB2.
+send intSID.
+nil
+
+Transaction T6:
+receive intSID.
+intSTEP := intSTEP_B[intSID].
+if (intSTEP = intB1) then
+X8 := intMEM_X8[intSID].
+receive X9.
+if (X9 = res1) then
+send ok.
+nil
+else nil
+else nil
+
+Transaction T7:
+receive intSID.
+intSTEP := intSTEP_B[intSID].
+if (intSTEP = intB2) then
+X8 := intMEM_X8[intSID].
+receive X10.
+if (X10 = res2) then
+if (X8 = d) then
+send ok.
+nil
+else send wrong.
+nil
+else nil
+else nil
+
+Bound: 2

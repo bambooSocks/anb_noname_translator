@@ -1,0 +1,31 @@
+Sigma0:
+  public yes/0 no/0 intFRESH/0 a/0 b/0 c/0 s/0
+
+Transaction T1:
+new intSID.
+send intSID.
+nil
+
+Transaction T2:
+receive intSID.
+send inv(pk(a)).
+nil
+
+Transaction T3:
+* X1 in {a,b,c}.
+receive X2.
+if (pk(a) = pubk(X2)) then
+* X3 in {yes,no}.
+if (X3 = yes) then
+new X4,X5.
+send crypt(pk(X1),pair(yes,X4),X5).
+nil
+else new X6.
+send crypt(pk(X1),no,X6).
+nil
+else nil
+
+Transaction T4:
+nil
+
+Bound: 4

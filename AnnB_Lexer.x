@@ -40,6 +40,7 @@ tokens :-
   "Sigma"             { (\ p s -> TSIGMA p) }
   "Cells"             { (\ p s -> TCELLS p) }
   "Agents"            { (\ p s -> TAGENTS p) }
+  "Roles"             { (\ p s -> TROLES p) }
   "Knowledge"         { (\ p s -> TKNOWLEDGE p) }
   "Actions"	          { (\ p s -> TACIONS p) }
   "Bound"             { (\ p s -> TBOUND p) }
@@ -85,6 +86,7 @@ tokens :-
    | TSIGMA AlexPosn
    | TCELLS AlexPosn
    | TAGENTS AlexPosn
+   | TROLES AlexPosn
    | TKNOWLEDGE AlexPosn
    | TACIONS AlexPosn
    | TBOUND AlexPosn
@@ -125,6 +127,7 @@ tokenPosn (TSIGMA0 p) = p
 tokenPosn (TSIGMA p) = p
 tokenPosn (TCELLS p) = p
 tokenPosn (TAGENTS p) = p
+tokenPosn (TROLES p) = p
 tokenPosn (TKNOWLEDGE p) = p
 tokenPosn (TACIONS p) = p
 tokenPosn (TBOUND p) = p

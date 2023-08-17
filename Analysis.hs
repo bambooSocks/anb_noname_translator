@@ -71,16 +71,45 @@ project ag (Comm ag1 ag2 m rest) =
 project ag _ =
   error ("Failed when retrieving projections for agent " ++ ag)
 
-actionsToProjs :: Action -> [(Agent, Projection)]
+filterRolesOnlyMsgs :: [Agent] -> [Msg] -> [Agent]
+filterRolesOnlyMsgs roles [] = []
+filterRolesOnlyMsgs roles (Atom x:msgs) =
+  if List.elem x roles then
+    (x:filterRolesOnlyMsgs roles msgs)
+  else 
+    filterRolesOnlyMsgs roles msgs
+filterRolesOnlyMsgs roles (Comp _ _:msgs) =
+  filterRolesOnlyMsgs roles msgs
+
+getRolesFromKnowledge :: Agent -> S.Header -> [Agent]
+getRolesFromKnowledge ag h = do
+  let roles = Map.keys (S.roles h)
+  let know = Map.findWithDefault [] ag (S.know h)
+  filterRolesOnlyMsgs roles know
+
+nestAgentPick :: [Agent] -> S.Header -> Projection -> Projection
+nestAgentPick [] _ p = p
+nestAgentPick (r:rs) h p = do
+  let rest = nestAgentPick rs h p
+  let domain = Map.findWithDefault [] r (S.roles h)
+  Choice MStar r domain rest
+
+initProject :: Agent -> Action -> S.Header -> Projection
+initProject ag ac h = do
+  let roles = getRolesFromKnowledge ag h
+  let proj = project ag ac
+  nestAgentPick roles h proj
+
+actionsToProjs :: Action -> S.Header -> [(Agent, Projection)]
 -- split actions into corresponding projections
-actionsToProjs a = do
-  let agents = H.getActors a
-  map (\ag -> (ag, (project ag a))) agents
+actionsToProjs ac h = do
+  let agents = H.getActors ac
+  map (\ag -> (ag, (initProject ag ac h))) agents
 
 getCells :: Action -> [CellDef]
 getCells a = do
   let acs = List.nub (H.getActors a)
-  let stepCells = map (\ac -> ("__STEP_" ++ ac, Atom "__SID", Atom (ac ++ "0"))) acs
+  let stepCells = map (\ac -> ("intSTEP_" ++ ac, Atom "intSID", Atom (ac ++ "0"))) acs
   stepCells
 
 composeFormula :: Formula Msg -> S.State -> (Formula Recipe)
@@ -156,71 +185,71 @@ setAllLabelsDone ((RLabel l):rs) msg s = do
 setAllLabelsDone (_:rs) msg s =
   setAllLabelsDone rs msg s
 
-analyzeToDo :: Agent -> S.State -> ([Check], S.State)
+analyzeToDo :: S.State -> S.MCounter ([Check], S.State)
 -- try to decomposes all messages in frame that are marked ToDo
-analyzeToDo ag s = do
+analyzeToDo s = do
   case (List.find (\(_,(_,mark)) -> mark == ToDo) (Map.toList (S.frame s))) of
     Just (l,(msg,_)) -> do
-      let (ch, s1) = analyze ag l msg s
-      let (chs, s2) = analyzeToDo ag s1
-      ((ch ++ chs), s2)
-    Nothing -> ([], s)
+      (ch, s1) <- analyze l msg s
+      (chs, s2) <- analyzeToDo s1
+      return ((ch ++ chs), s2)
+    Nothing -> do return ([], s)
   
-analyze :: Agent -> Label -> Msg -> S.State -> ([Check], S.State)
+analyze :: Label -> Msg -> S.State -> S.MCounter ([Check], S.State)
 -- pair decomposition
-analyze ag l msg@(Comp "pair" (fr:sc:[])) s = do
+analyze l msg@(Comp "pair" (fr:sc:[])) s = do
   let s1 = S.register msg Done l s
-  let (l1, s2) = S.registerFresh ag fr ToDo s1
-  let (l2, s3) = S.registerFresh ag sc ToDo s2
-  let (chs, s4) = analyzeToDo ag s3
-  (([CTry l1 (RComp "proj1" [RLabel l]), CTry l2 (RComp "proj2" [RLabel l])] ++ chs), s4)
+  (l1, s2) <- S.registerFresh fr ToDo s1
+  (l2, s3) <- S.registerFresh sc ToDo s2
+  (chs, s4) <- analyzeToDo s3
+  return (([CTry l1 (RComp "proj1" [RLabel l]), CTry l2 (RComp "proj2" [RLabel l])] ++ chs), s4)
 -- scrypt decomposition, has to have a key sk in frame to receive the msg
-analyze ag l msg@(Comp "scrypt" (sk:dm:r:[])) s = do
+analyze l msg@(Comp "scrypt" (sk:dm:r:[])) s = do
   let rs = compose sk s
   if rs /= [] then do
     let s1 = S.register msg Done l s
-    let (l1, s2) = S.registerFresh ag dm ToDo s1
-    let (chs, s3) = analyzeToDo ag s2
-    (([CTry l1 (RComp "dscrypt" [(head rs), RLabel l])] ++ chs), s3)
+    (l1, s2) <- S.registerFresh dm ToDo s1
+    (chs, s3) <- analyzeToDo s2
+    return (([CTry l1 (RComp "dscrypt" [(head rs), RLabel l])] ++ chs), s3)
   else
-    ([], s)
+    return ([], s)
 -- crypt decomposition, has to have a private key inv(pk) in frame to receive the msg
-analyze ag l msg@(Comp "crypt" (pk:dm:r:[])) s = do
+analyze l msg@(Comp "crypt" (pk:dm:r:[])) s = do
   let rs = compose (Comp "inv" [pk]) s
   if rs /= [] then do
     let s1 = S.register msg Done l s
-    let (l1, s2) = S.registerFresh ag dm ToDo s1
-    let (chs, s3) = analyzeToDo ag s2
-    (([CTry l1 (RComp "dcrypt" [(head rs), RLabel l])] ++ chs), s3)
+    (l1, s2) <- S.registerFresh dm ToDo s1
+    (chs, s3) <- analyzeToDo s2
+    return (([CTry l1 (RComp "dcrypt" [(head rs), RLabel l])] ++ chs), s3)
   else
-    ([], s)
+    return ([], s)
 -- sign decomposition, has to have a public key pk in frame to receive the msg
-analyze ag l msg@(Comp "sign" ((Comp "inv" (pk:[])):dm:[])) s = do
+analyze l msg@(Comp "sign" ((Comp "inv" (pk:[])):dm:[])) s = do
   let rs = compose pk s
   if rs /= [] then do
     let s1 = S.register msg Done l s
-    let (l1, s2) = S.registerFresh ag dm ToDo s1
-    let (chs, s3) = analyzeToDo ag s2
-    (([CTry l1 (RComp "open" [(head rs), RLabel l])] ++ chs), s3)
+    (l1, s2) <- S.registerFresh dm ToDo s1
+    (chs, s3) <- analyzeToDo s2
+    return (([CTry l1 (RComp "open" [(head rs), RLabel l])] ++ chs), s3)
   else
-    ([], s)
+    return ([], s)
 -- inv decomposition
-analyze ag l msg@(Comp "inv" (pk:[])) s = do
+analyze l msg@(Comp "inv" (pk:[])) s = do
   let rs = compose pk s
   if rs /= [] then do
     let s1 = S.register msg Done l s
-    (([CIf (BEq (head rs) (RComp "pubk" [RLabel l]))]), s1)
+    return (([CIf (BEq (head rs) (RComp "pubk" [RLabel l]))]), s1)
   else
-    ([], s)
+    return ([], s)
 -- default decomposition
-analyze ag l msg s = do
+analyze l msg s = do
   let rs = compose msg s
   if rs /= [] then do
     let ifChecks = map (\(a,b) -> CIf (BEq a b)) (getAllRecipePairs l rs)
     let s1 = setAllLabelsDone rs msg s
-    (ifChecks, s1)
+    return (ifChecks, s1)
   else
-    ([], s)
+    return ([], s)
   
 convertCheck :: Check -> Process -> Process
 -- convert checks into processes
@@ -229,134 +258,154 @@ convertCheck (CTry l r) acc =
 convertCheck (CIf cond) acc = do
   NIf cond acc NNil
 
-endTxn :: Agent -> [Label] -> Int -> Process -> Process
+getStepCell :: Agent -> String
+getStepCell ag = "intSTEP_" ++ ag
+
+getStepLabel :: Agent -> Int -> String
+getStepLabel ag tn = "int" ++ ag ++ (show tn)
+
+endTxn :: Agent -> [Label] -> Int -> Process -> S.MCounter Process
 -- create the ending processes of a transaction
 endTxn ag [] tn p = do
-  NWrite ("__STEP_" ++ ag) (RPub "__SID") (RPub ("__" ++ ag ++ (show tn))) (NSend (RPub "__SID") p)
+  let stepCell = getStepCell ag
+  let stepLabel = getStepLabel ag tn
+  S.addCell stepCell
+  S.addPubLabel stepLabel
+  return (NWrite stepCell (RPub "intSID") (RPub stepLabel) (NSend (RPub "intSID") p))
 endTxn ag (x:xs) tn p = do
-  NWrite ("__MEM_" ++ x) (RPub "__SID") (RLabel x) (endTxn ag xs tn p)
+  let memCell = "intMEM_" ++ x
+  S.addCell memCell
+  end <- endTxn ag xs tn p
+  return (NWrite memCell (RPub "intSID") (RLabel x) end)
 
 startTxn :: Agent -> [Label] -> Int -> Process -> Process
 -- create the starting processes of a transaction
 startTxn ag ys tn p = do
-  NReceive "__SID" (
-    NRead "__STEP" ("__STEP_" ++ ag) (RPub "__SID") (
-      NIf (BEq (RLabel "__STEP") (RPub ("__" ++ ag ++ (show tn)))) (
+  NReceive "intSID" (
+    NRead "intSTEP" (getStepCell ag) (RPub "intSID") (
+      NIf (BEq (RLabel "intSTEP") (RPub (getStepLabel ag tn))) (
         readAll ys p) NNil))
 
 readAll :: [Label] -> Process -> Process
 -- create the read processes for beginning of a transaction
 readAll [] p = p
-readAll (y:ys) p = NRead y ("__MEM_" ++ y) (RPub "__SID") p
+readAll (y:ys) p = NRead y ("intMEM_" ++ y) (RPub "intSID") p
 
-getAgentKnowledge :: Agent -> [Knowledge] -> [Msg]
--- find the agent's knowledge
-getAgentKnowledge ag kns =
-  case (List.find (\(a,_) -> a == ag) kns) of
-    Just (_, msgs) -> msgs
-    Nothing -> error ("Couldn't find knowledge for agent: " ++ ag)
+initConvert :: [(Agent, Projection)] -> S.Header -> S.MCounter [Process]
+initConvert aprs h = do
+  (p:ps) <- convert aprs h
+  return (NNew ["intSID"] (NSend (RPub "intSID") NNil):(NReceive ("intSID") p):ps) 
 
-convert :: [(Agent, Projection)] -> S.Header -> [Knowledge] -> [Process]
+convert :: [(Agent, Projection)] -> S.Header -> S.MCounter [Process]
 -- convert agent related projections to processes
-convert [] _ _ = []
-convert ((ag, pr):aprs) h kns = do
-  let kn = getAgentKnowledge ag kns
-  let p = initTranslate ag pr h kn
+convert [] _ = do return []
+convert ((ag, pr):aprs) h = do
+  p <- initTranslate ag pr h
   let pp = breakProcess p
-  let ps = convert aprs h kns
-  (pp ++ ps)
+  ps <- convert aprs h 
+  return (pp ++ ps)
 
-getHonestAgentChoice :: Agent -> S.Header -> Process -> Process
--- get a choice process for picking an honest agent
-getHonestAgentChoice ag h r = NChoice MStar ag (S.hAgs h) r
+-- getHonestAgentChoice :: Agent -> S.Header -> Process -> Process
+-- -- get a choice process for picking an honest agent
+-- getHonestAgentChoice ag h r = NChoice MStar ag (S.hAgs h) r
 
-getAllAgentChoice :: Agent -> S.Header -> Process -> Process
--- get a choice process for picking any agent
-getAllAgentChoice ag h r = NChoice MStar ag ((S.hAgs h) ++ (S.dAgs h)) r
+-- getAllAgentChoice :: Agent -> S.Header -> Process -> Process
+-- -- get a choice process for picking any agent
+-- getAllAgentChoice ag h r = NChoice MStar ag ((S.hAgs h) ++ (S.dAgs h)) r
 
-initTranslate :: Agent -> Projection -> S.Header -> [Msg] -> Process
+-- freshLabel :: Int -> (Label, Int)
+--  -- generate a fresh label
+-- freshLabel i = ("X" ++ show i, i + 1)
+
+-- registerManyFresh :: [Msg] -> Marking -> Int -> State -> ([Label], Int, State)
+-- -- generate a new label and register message with given marking
+-- registerManyFresh [] _ i s = ([], i, s)
+-- registerManyFresh (msg:msgs) marking i s = do
+--   let (x, i1) = freshLabel i
+--   let s1 = register msg marking x s
+--   let (rest, i2, s2) = registerManyFresh msgs marking i1 s1
+--   (label:rest, i2, s2)
+
+initTranslate :: Agent -> Projection -> S.Header -> S.MCounter Process
 -- initialize a translation of a projection into a process chain
-initTranslate ag pr h kn = do
-  let s = S.addInitialState ag h kn S.initialState
-  let (chs, s1) = analyzeToDo ag s
-  let (p, _) = translate ag pr s1 0
-  let checked = foldr convertCheck p chs
-  getHonestAgentChoice ag h checked
-  -- TODO: generate agent picking code
+initTranslate ag pr h = do
+  let know = Map.findWithDefault [] ag (S.know h)
+  let s = S.addInitialState ag h know S.initialState
+  c <- S.get
+  S.put c { S.txnCounter = 0 }
+  translate ag pr s
   -- TODO: create S
 
-translate :: Agent -> Projection -> S.State -> Int -> (Process, Int)
+translate :: Agent -> Projection -> S.State -> S.MCounter Process
 -- translate a projection into a process chain
-translate ag (Receive m r) s tn = do
-  let (x, s1) = S.registerFresh ag m ToDo s
-  let (chs, s2) = analyzeToDo ag s1
-  let s3 = S.addToXVars x s2
-  let (p, tn1) = translate ag r s3 tn
+translate ag (Receive m r) s = do
+  (x, s1) <- S.registerFresh m ToDo s
+  (chs, s2) <- analyzeToDo s1
+  p <- translate ag r s2
   let nestedChecks = foldr convertCheck p chs
-  (NReceive x nestedChecks, tn1)
-translate ag (Read v c t r) s tn = do
+  return (NReceive x nestedChecks)
+translate ag (Read v c t r) s = do
   let rs = compose t s
-  let (x, s1) = S.registerFresh ag (Atom v) ToDo s
-  let s2 = S.addToXVars x s1
-  let (p, tn1) = translate ag r s2 tn
-  (NRead x c (head rs) p, tn1)
-translate ag (Choice m v d r) s tn = do
+  (x, s1) <- S.registerFresh (Atom v) ToDo s
+  p <- translate ag r s1
+  return (NRead x c (head rs) p)
+translate ag (Choice m v d r) s = do
   let rrs = composeMany (map Atom d) s
   if any ([]==) rrs then
     error ("Could not compose some of the elements in domain: " ++ (show d))
   else do
-    let (x, s1) = S.registerFresh ag (Atom v) ToDo s
-    let s2 = S.addToXVars x s1
-    let (p, tn1) = translate ag r s2 tn
-    (NChoice m x d p, tn1)
-translate ag (If f r1 r2) s tn = do
+    (x, s1) <- S.registerFresh (Atom v) ToDo s
+    p <- translate ag r s1
+    return (NChoice m x d p)
+translate ag (If f r1 r2) s = do
   let fr = composeFormula f s
-  let (p1, tn1) = translate ag r1 s tn
-  let (p2, tn2) = translate ag r2 s tn1
-  (NIf fr p1 p2, tn2)
-translate ag (New vars r) s tn = do
+  p1 <- translate ag r1 s
+  p2 <- translate ag r2 s
+  return (NIf fr p1 p2)
+translate ag (New vars r) s = do
   let msgs = map (\v -> Atom v) vars
-  let (ls, s1) = S.registerManyFresh ag msgs Done s
-  let (p, tn1) = translate ag r s1 tn
-  (NNew ls p, tn1)
-translate ag (Send m r) s tn = do
+  (ls, s1) <- S.registerManyFresh msgs Done s
+  p <- translate ag r s1
+  return (NNew ls p)
+translate ag (Send m r) s = do
   let rs = compose m s
-  let (p, tn1) = translate ag r s tn
-  (NSend (head rs) p, tn1)
-translate ag (Write c t1 t2 r) s tn = do
+  p <- translate ag r s
+  return (NSend (head rs) p)
+translate ag (Write c t1 t2 r) s = do
   let rs1 = compose t1 s
   let rs2 = compose t2 s
-  let (p, tn1) = translate ag r s tn
-  (NWrite c (head rs1) (head rs2) p, tn1)
-translate ag (Release m f r) s tn = do
+  p <- translate ag r s
+  return (NWrite c (head rs1) (head rs2) p)
+translate ag (Release m f r) s = do
   let fr = composeFormula f s
-  let (p, tn1) = translate ag r s tn
-  (NRelease m fr p, tn1)
-translate ag (TxnEnd (Split r1 r2)) s tn =
+  p <- translate ag r s
+  return (NRelease m fr p)
+translate ag (TxnEnd (Split r1 r2)) s =
   if r1 == Nil && r2 == Nil then
-    (NNil, tn)
+    return (NNil)
   else do
-    let (s1, newTn, xs, ys) = prepStateForBreak tn s
-    let (p1, tn1) = translate ag r1 s1 newTn
-    let (p2, tn2) = translate ag r2 s1 tn1
-    (endTxn ag xs newTn (NBreak (startTxn ag ys newTn p1) (startTxn ag ys newTn p2)), tn2)
-translate ag (TxnEnd r) s tn =
+    let (s1, xs, ys) = prepStateForBreak s
+    newTxnNo <- S.freshTxnNo
+    p1 <- translate ag r1 s1
+    p2 <- translate ag r2 s1
+    endTxn ag xs newTxnNo (NBreak (startTxn ag ys newTxnNo p1) (startTxn ag ys newTxnNo p2))
+translate ag (TxnEnd r) s =
   if r == Nil then
-    (NNil, tn)
+    return (NNil)
   else do
-    let (s1, newTn, xs, ys) = prepStateForBreak tn s
-    let (p, tn1) = translate ag r s1 newTn
-    (endTxn ag xs newTn (NBreak (startTxn ag ys newTn p) NNil), tn1)
-translate ag Nil _ tn = (NNil, tn)
+    let (s1, xs, ys) = prepStateForBreak s
+    newTxnNo <- S.freshTxnNo
+    p <- translate ag r s1
+    endTxn ag xs newTxnNo (NBreak (startTxn ag ys newTxnNo p) NNil)
+translate ag Nil _ = return NNil
 
-prepStateForBreak :: Int -> S.State -> (S.State, Int, [String], [String])
+prepStateForBreak :: S.State -> (S.State, [String], [String])
 -- reset a state for new transaction
-prepStateForBreak tn s = do
+prepStateForBreak s = do
   let xs = S.xVars s
-  let newTn = tn + 1
   let ys = (S.yVars s) ++ xs
   let s1 = s { S.xVars = [], S.yVars = ys }
-  (s1, newTn, xs, ys)
+  (s1, xs, ys)
 
 breakTxn :: Process -> (Process, [Process])
 -- break process chain into one transaction and the test of the chain
@@ -403,3 +452,10 @@ breakProcess :: Process -> [Process]
 breakProcess p = do
   let (p', rest) = breakTxn p
   p':(concatMap breakProcess rest)
+
+updateHeaderAndCells :: S.Counter -> S.Header -> [CellDef] -> (S.Header, [CellDef])
+updateHeaderAndCells c h cells = do
+  let newToSig0 = ("intFRESH":(S.pubLabels c)) ++ (S.hAgs h) ++ (S.dAgs h)
+  let newHeader = S.addToSigma0 newToSig0 h
+  let newCells = map (\cell -> (cell, Atom "intSID", Atom "intFRESH")) (List.nub (S.cells c))
+  (newHeader, newCells ++ cells)
