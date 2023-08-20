@@ -8,3 +8,21 @@ TODO:
  - proper testing
  - in verbatim code
 
+
+
+initTransaction for gen sid
+initKnowTransactions for each agent (before their transactions) both accept sid
+intuderReleaseTransaction from the intruder Knowledge
+
+
+    \mathcal{P} ::= & \ new(x_1,\dots x_n).\mathcal{P} \\
+                     & | \ choice(m,v,d).\mathcal{P} \\
+                     & | \ read(v,c,t).\mathcal{P} \\
+                     & | \ write(c, t_1, t_2).\mathcal{P} \\
+                     & | \ release(m,\phi).\mathcal{P} \\
+                     & | \ send(m).\mathcal{P} \\
+                     & | \ receive(m).\mathcal{P} \\
+                     & | \ if(\phi, \mathcal{P}, \mathcal{P}) \\
+                     & | \ split(\mathcal{P}, \mathcal{P}) \\
+                     & | \ txnEnd.\mathcal{P} \\
+                     & | \ nil

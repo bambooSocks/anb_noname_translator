@@ -19,6 +19,13 @@ msgToStr (Comp id args) = do
   let argStr = List.intercalate "," (map msgToStr args)
   id ++ "(" ++ argStr ++ ")"
 
+msgToRecipe :: Msg -> Recipe
+-- converts a message into a string
+msgToRecipe (Atom x) = RPub x
+msgToRecipe (Comp id args) = do
+  let argR = map msgToRecipe args
+  RComp id argR
+
 recipeToStr :: Recipe -> String
 -- converts a recipe into a string
 recipeToStr (RPub x) = x

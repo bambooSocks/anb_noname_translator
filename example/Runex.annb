@@ -8,16 +8,17 @@ Sigma:
 
 Agents:
     a, b, c, s
+    dishonest i
 
 Roles:
     A: a, b, c
 
 Knowledge:
-    a: inv(pk(a))
-    s: A
+    s: A, pk(A)
+    A: A
+    i: inv(pk(a))
 
 Actions:
-    a -> s: inv(pk(a))
     s: * Y in {yes, no}
     s: if Y = yes then
         s: new N1, N2

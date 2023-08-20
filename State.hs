@@ -8,7 +8,7 @@ import Types (
   Label, Msg, Agent, Marking(ToDo, Done), Frame, Def, SigmaDef (Public, Private), AgentDef (Honest, Dishonest),
   Knowledge, RoleDef)
 
-data Counter = Counter
+data State = State
   { varCounter :: Int
   , txnCounter :: Int
   , cells      :: [String]
@@ -16,8 +16,8 @@ data Counter = Counter
   }
   deriving (Show)
 
-initialCounter :: Counter
-initialCounter = Counter 
+initialState :: State
+initialState = State 
   { varCounter = 0
   , txnCounter = 0
   , cells      = []
@@ -25,48 +25,48 @@ initialCounter = Counter
   }
 
 -- state monad
-type MCounter = ST.StateT Counter []
+type MState = ST.StateT State []
 
-get :: MCounter Counter
+get :: MState State
 -- fetch the current state
 get = ST.get
 
-put :: Counter -> MCounter ()
+put :: State -> MState ()
 -- update the state with new version
 put = ST.put
 
-runMCounter :: MCounter a -> Counter -> [(a, Counter)]
+runMState :: MState a -> State -> [(a, State)]
 -- apply the state transformer on an state and return the final state and value
-runMCounter = ST.runStateT
+runMState = ST.runStateT
 
-evalMCounter :: MCounter a -> Counter -> [a]
+evalMState :: MState a -> State -> [a]
 -- apply the state transformer on an state and return the final value
-evalMCounter = ST.evalStateT
+evalMState = ST.evalStateT
 
-execMCounter :: MCounter a -> Counter -> [Counter]
+execMState :: MState a -> State -> [State]
 -- apply the state transformer on an state and return the final state
-execMCounter = ST.execStateT
+execMState = ST.execStateT
 
-freshVarLabel :: MCounter String
+freshVarLabel :: MState String
 freshVarLabel = do
   c <- get
   let new = (varCounter c) + 1
   put c { varCounter = new }
   return ("X" ++ (show new))
 
-freshTxnNo :: MCounter Int
+freshTxnNo :: MState Int
 freshTxnNo = do
   c <- get
   let new = (txnCounter c) + 1
   put c { txnCounter = new }
   return new
 
-addCell :: String -> MCounter ()
+addCell :: String -> MState ()
 addCell cell = do
   c <- get
   put c { cells = cell:(cells c) }
 
-addPubLabel :: String -> MCounter ()
+addPubLabel :: String -> MState ()
 addPubLabel label = do
   c <- get
   put c { pubLabels = label:(pubLabels c) }
@@ -100,20 +100,18 @@ addToSigma0 ls h = do
   let defs = map (\l -> (l, 0)) ls
   h { s0 = (s0 h) ++ defs }
 
-data State = State
+data FrameState = FrameState
   { frame      :: Frame
   , pubFunc    :: [(String, Int)]
-  , cellLabels :: [Label]
   , xVars      :: [String]
   , yVars      :: [String]
   }
   deriving (Show)
 
-initialState :: State
-initialState = State 
+initialFrameState :: FrameState
+initialFrameState = FrameState 
   { frame      = Map.empty
   , pubFunc    = [("pair", 2), ("crypt", 3), ("scrypt", 3), ("sign", 2), ("inv", 1)] -- TODO: this is temp
-  , cellLabels = []
   , xVars      = []
   , yVars      = []
   }
@@ -134,18 +132,18 @@ splitAgentDef ((Honest a):ads) (hAgs, dAgs) =
 splitAgentDef ((Dishonest a):ads) (hAgs, dAgs) = 
   splitAgentDef ads (hAgs, dAgs ++ a)
 
-isPublicId :: String -> Int -> State -> Bool
+isPublicId :: String -> Int -> FrameState -> Bool
 -- check whether the identifier is public with correct arity
 isPublicId id arity s = do
   any (\(i,a) -> i == id && a == arity) (pubFunc s)
 
-register :: Msg -> Marking -> Label -> State -> State
+register :: Msg -> Marking -> Label -> FrameState -> FrameState
 -- register a new label and corresponding message in the frame
 register msg marking label s = do
   let newFrame = Map.insert label (msg, marking) (frame s)
   s { frame = newFrame }
 
-registerFresh :: Msg -> Marking -> State -> MCounter (Label, State)
+registerFresh :: Msg -> Marking -> FrameState -> MState (Label, FrameState)
 -- generate a new label and register message with given marking
 registerFresh msg marking s = do
   x <- freshVarLabel
@@ -153,7 +151,7 @@ registerFresh msg marking s = do
   let s2 = addToXVars x s1
   return (x, s2)
 
-registerManyFresh :: [Msg] -> Marking -> State -> MCounter ([Label], State)
+registerManyFresh :: [Msg] -> Marking -> FrameState -> MState ([Label], FrameState)
 -- generate a new label and register message with given marking
 registerManyFresh [] _ s = do
   return ([], s)
@@ -162,19 +160,19 @@ registerManyFresh (msg:msgs) marking s = do
   (rest, s2) <- registerManyFresh msgs marking s1
   return (label:rest, s2)
 
-addInitialState :: Agent -> Header -> [Msg] -> State -> State
-addInitialState ag h msgs s = do
+addInitialFrameState :: Agent -> Header -> [Msg] -> FrameState -> FrameState
+addInitialFrameState ag h msgs s = do
   let ags = map (\a -> (a, 0)) ((hAgs h) ++ (dAgs h))
   s { pubFunc = ((s0 h) ++ (sPub h) ++ ags ++ (pubFunc s)) }
 
-addToXVars :: Label -> State -> State
+addToXVars :: Label -> FrameState -> FrameState
 addToXVars var s =
   s { xVars = (var:(xVars s)) }
 
-clearXVars :: State -> State
+clearXVars :: FrameState -> FrameState
 clearXVars s =
   s { xVars = [] }
 
-setYVars :: [Label] -> State -> State
+setYVars :: [Label] -> FrameState -> FrameState
 setYVars yVars s =
   s { yVars = yVars }

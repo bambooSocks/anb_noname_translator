@@ -20,7 +20,7 @@ main = do
       let header = S.getHeader sig0 sig ags roles kn
       let projs = A.actionsToProjs actions header
       -- putStrLn $ show projs
-      let (transactions, c):_ = S.runMCounter (A.initConvert projs header) S.initialCounter
+      let (transactions, c):_ = S.runMState (A.initConvert projs header) S.initialState
       let (newHeader, newCells) = A.updateHeaderAndCells c header cells
       let nn = G.generate newHeader newCells transactions bound
       putStrLn nn
