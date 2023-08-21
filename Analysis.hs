@@ -82,26 +82,26 @@ filterRolesOnlyMsgs roles (Atom x:msgs) =
 filterRolesOnlyMsgs roles (Comp _ _:msgs) =
   filterRolesOnlyMsgs roles msgs
 
-getRolesFromKnowledge :: Agent -> S.Header -> [Agent]
+getRolesFromKnow :: Agent -> S.Header -> [Agent]
 -- filtering the roles from agent's knowledge
-getRolesFromKnowledge ag h = do
+getRolesFromKnow ag h = do
   let roles = Map.keys (S.roles h)
   let know = Map.findWithDefault [] ag (S.know h)
   filterRolesOnlyMsgs roles know
 
-nestInitKnow :: Agent -> [Msg] -> Msg
+nestKnow :: [Msg] -> Msg
 -- nesting several messages from initial knowledge to pairs
-nestInitKnow ag [] = error ("No initial knowledge found for agent " ++ ag)
-nestInitKnow ag (msg:[]) = msg
-nestInitKnow ag (msg:msgs) = do
-  let nested = nestInitKnow ag msgs
+nestKnow [] = error ("No initial knowledge found")
+nestKnow (msg:[]) = msg
+nestKnow (msg:msgs) = do
+  let nested = nestKnow msgs
   Comp "pair" [msg, nested]
 
 getInitKnowMsg :: Agent -> S.Header -> Msg
 -- get initial knowledge message for agent
 getInitKnowMsg ag h = do
   let know = Map.findWithDefault [] ag (S.know h)
-  nestInitKnow ag know
+  nestKnow know
 
 initProject :: Agent -> Action -> S.Header -> Projection
 -- initialize projection by receiving the initial knowledge
@@ -313,16 +313,26 @@ injectInitSidTxn p@(NSend _ _) = (NNew ["int_SID"] (NSend (RPub "int_SID") p))
 getInitKnowTxn :: Agent -> S.Header -> Process
 -- get initial knowledge transaction for agent
 getInitKnowTxn ag h = do
-  let roles = getRolesFromKnowledge ag h
+  let roles = getRolesFromKnow ag h
   let ikRecipe = H.msgToRecipe (getInitKnowMsg ag h )
   nestAgentPick roles h (NSend ikRecipe NNil)
+
+getIntruderKnow :: S.Header -> [Msg]
+getIntruderKnow h = do
+  let dAgs = S.dAgs h
+  foldr (\dAg acc -> (Map.findWithDefault [] dAg (S.know h) ++ acc)) [] dAgs
+
+getIntruderKnowTxn :: S.Header -> Process
+getIntruderKnowTxn h = do
+  let intruderKnowRecipe = H.msgToRecipe (nestKnow (getIntruderKnow h))
+  NSend intruderKnowRecipe NNil
 
 initConvert :: [(Agent, Projection)] -> S.Header -> S.MState [Process]
 -- initialize the convert function by creating an initial transaction generating int_SID session ID
 initConvert aprs h = do
   let (ip:ips) = map (\(ag, _) -> getInitKnowTxn ag h) aprs
   (p:ps) <- convert aprs h
-  return ((injectInitSidTxn ip):ips ++ (NReceive "int_SID" p):ps) 
+  return ((injectInitSidTxn ip):ips ++ (getIntruderKnowTxn h):(NReceive "int_SID" p):ps) 
 
 convert :: [(Agent, Projection)] -> S.Header -> S.MState [Process]
 -- convert agent related projections to processes
