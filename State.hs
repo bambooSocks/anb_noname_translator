@@ -48,6 +48,7 @@ execMState :: MState a -> State -> [State]
 execMState = ST.execStateT
 
 freshVarLabel :: MState String
+-- creates a fresh label for variables
 freshVarLabel = do
   c <- get
   let new = (varCounter c) + 1
@@ -55,6 +56,7 @@ freshVarLabel = do
   return ("X" ++ (show new))
 
 freshTxnNo :: MState Int
+-- creates a fresh transaction number
 freshTxnNo = do
   c <- get
   let new = (txnCounter c) + 1
@@ -62,11 +64,13 @@ freshTxnNo = do
   return new
 
 addCell :: String -> MState ()
+-- adds a new cell definition to the state
 addCell cell = do
   c <- get
   put c { cells = cell:(cells c) }
 
 addPubLabel :: String -> MState ()
+-- adds a new public label to the state
 addPubLabel label = do
   c <- get
   put c { pubLabels = label:(pubLabels c) }
@@ -83,6 +87,7 @@ data Header = Header
   deriving(Show)
 
 getHeader :: [Def] -> [SigmaDef] -> [AgentDef] -> [RoleDef] -> [Knowledge] -> Header
+-- creates the header structure from the parsed code
 getHeader sig0 sig ags roles know = do
   let (sPub, sPriv) = splitSigmaDef sig ([],[])
   let (hAgs, dAgs) = splitAgentDef ags ([],[])
@@ -96,6 +101,7 @@ getHeader sig0 sig ags roles know = do
          }
 
 addToSigma0 :: [String] -> Header -> Header
+-- adds constants to the header
 addToSigma0 ls h = do
   let defs = map (\l -> (l, 0)) ls
   h { s0 = (s0 h) ++ defs }
@@ -117,6 +123,7 @@ initialFrameState = FrameState
   }
 
 splitSigmaDef :: [SigmaDef] -> ([Def], [Def]) -> ([Def], [Def])
+-- separates the public and private definitions in sigma
 splitSigmaDef [] (sPub, sPriv) =
   (sPub, sPriv)
 splitSigmaDef ((Public d):sds) (sPub, sPriv) =
@@ -125,6 +132,7 @@ splitSigmaDef ((Private d):sds) (sPub, sPriv) =
   splitSigmaDef sds (sPub, sPriv ++ d)
 
 splitAgentDef :: [AgentDef] -> ([Agent], [Agent]) -> ([Agent], [Agent])
+-- separates the honest and dishonest agent definitions
 splitAgentDef [] (hAgs, dAgs) =
   (hAgs, dAgs)
 splitAgentDef ((Honest a):ads) (hAgs, dAgs) = 
@@ -161,18 +169,22 @@ registerManyFresh (msg:msgs) marking s = do
   return (label:rest, s2)
 
 addInitialFrameState :: Agent -> Header -> [Msg] -> FrameState -> FrameState
+-- initializes the frames state with initial knowledge
 addInitialFrameState ag h msgs s = do
   let ags = map (\a -> (a, 0)) ((hAgs h) ++ (dAgs h))
   s { pubFunc = ((s0 h) ++ (sPub h) ++ ags ++ (pubFunc s)) }
 
 addToXVars :: Label -> FrameState -> FrameState
+-- add a label to X variable set
 addToXVars var s =
   s { xVars = (var:(xVars s)) }
 
 clearXVars :: FrameState -> FrameState
+-- clear the X variable set
 clearXVars s =
   s { xVars = [] }
 
 setYVars :: [Label] -> FrameState -> FrameState
+-- set the Y variable set to a given value
 setYVars yVars s =
   s { yVars = yVars }

@@ -1,12 +1,10 @@
-
-
 module Types where
 
 import Data.List (intercalate)
 import qualified Data.Map as M
 
 type Var = String -- has to start with capital
-type Const = String -- has to start with lowercase (represents function and constant names)
+type Const = String -- has to start with lowercase
 type Agent = String
 type Cell = Const
 

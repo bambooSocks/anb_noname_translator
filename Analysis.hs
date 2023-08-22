@@ -318,11 +318,13 @@ getInitKnowTxn ag h = do
   nestAgentPick roles h (NSend ikRecipe NNil)
 
 getIntruderKnow :: S.Header -> [Msg]
+-- get intruder knowledge as message
 getIntruderKnow h = do
   let dAgs = S.dAgs h
   foldr (\dAg acc -> (Map.findWithDefault [] dAg (S.know h) ++ acc)) [] dAgs
 
 getIntruderKnowTxn :: S.Header -> Process
+-- get initial transaction releasing intruder's knowledge
 getIntruderKnowTxn h = do
   let intruderKnowRecipe = H.msgToRecipe (nestKnow (getIntruderKnow h))
   NSend intruderKnowRecipe NNil
