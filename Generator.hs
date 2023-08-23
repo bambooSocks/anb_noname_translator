@@ -31,13 +31,13 @@ generateDef (label, arity) =
   label ++ "/" ++ (show arity)
 
 generateAlgebra :: S.Header -> String
--- generate NN code for cell section
+-- generate NN code for algebra section
 generateAlgebra h = do
   let algsStr = List.intercalate "\n" (map generateAlgDef (S.alg h))
   if algsStr == "" then "" else "Algebra:\n" ++ algsStr ++ "\n\n"
 
 generateAlgDef :: (String, String) -> String
--- generate NN code for cell definition
+-- generate NN code for algebra definition
 generateAlgDef (input, output) =
   "  " ++ input ++ " -> " ++ output 
 

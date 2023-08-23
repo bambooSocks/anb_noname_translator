@@ -304,12 +304,15 @@ injectInitSidTxn (NChoice m v d r) = (NChoice m v d (injectInitSidTxn r))
 injectInitSidTxn p@(NSend _ _) = (NNew ["int_SID"] (NSend (RPub "int_SID") p))
 
 getWrapName :: Agent -> String
+-- creates a wrapper name for agent
 getWrapName ag = "int_IK_" ++ ag
 
 getExtractName :: Agent -> String
+-- creates a wrapper extractor name for agent
 getExtractName ag = "int_IK_extract_" ++ ag
 
 wrapInitKnow :: Agent -> Recipe -> Recipe
+-- wraps initial knowledge with the wrapper
 wrapInitKnow ag r = do
   let name = getWrapName ag
   RComp name [r]
@@ -485,6 +488,7 @@ breakProcess p = do
   p':(concatMap breakProcess rest)
 
 removePk :: S.Header -> S.Header
+-- removes a definition of pk from the sigmas
 removePk h = do
   let nSig0 = filter (\(f, _) -> f /= "pk") (S.s0 h)
   let nSig = filter (\(f, _) -> f /= "pk") (S.sPub h)
