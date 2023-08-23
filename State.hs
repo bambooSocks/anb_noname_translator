@@ -13,6 +13,8 @@ data State = State
   , txnCounter :: Int
   , cells      :: [String]
   , pubLabels  :: [String]
+  , wraps      :: [String]
+  , extracts   :: [(String, String)]
   }
   deriving (Show)
 
@@ -22,6 +24,8 @@ initialState = State
   , txnCounter = 0
   , cells      = []
   , pubLabels  = []
+  , wraps      = []
+  , extracts   = []
   }
 
 -- state monad
@@ -83,6 +87,7 @@ data Header = Header
   , dAgs  :: [Agent]
   , roles :: Map.Map Agent [Agent]
   , know  :: Map.Map String [Msg]
+  , alg   :: [(String, String)]
   }
   deriving(Show)
 
@@ -98,6 +103,7 @@ getHeader sig0 sig ags roles know = do
          , dAgs  = dAgs
          , roles = Map.fromList roles
          , know  = Map.fromList know
+         , alg   = []
          }
 
 addToSigma0 :: [String] -> Header -> Header
@@ -105,6 +111,20 @@ addToSigma0 :: [String] -> Header -> Header
 addToSigma0 ls h = do
   let defs = map (\l -> (l, 0)) ls
   h { s0 = (s0 h) ++ defs }
+
+addWrapsToSigma :: [String] -> Header -> Header
+-- adds wrapper functions to the header
+addWrapsToSigma ls h = do
+  let defs = map (\l -> (l, 1)) ls
+  h { sPriv = (sPriv h) ++ defs }
+
+addExtractsToAlgebra :: [(String, String)] -> Header -> Header
+-- adds extractor algebra to the algebra header
+addExtractsToAlgebra es h = do
+  let algs = map (\(e, w) -> (e ++ "(" ++ w ++ "(m))", "m")) es
+  let defs = map (\(e, _) -> (e, 1)) es
+  h { alg = algs, sPriv = (sPriv h) ++ defs }
+
 
 data FrameState = FrameState
   { frame      :: Frame
@@ -168,9 +188,9 @@ registerManyFresh (msg:msgs) marking s = do
   (rest, s2) <- registerManyFresh msgs marking s1
   return (label:rest, s2)
 
-addInitialFrameState :: Agent -> Header -> [Msg] -> FrameState -> FrameState
+addInitialFrameState :: Agent -> Header -> FrameState -> FrameState
 -- initializes the frames state with initial knowledge
-addInitialFrameState ag h msgs s = do
+addInitialFrameState ag h s = do
   let ags = map (\a -> (a, 0)) ((hAgs h) ++ (dAgs h))
   s { pubFunc = ((s0 h) ++ (sPub h) ++ ags ++ (pubFunc s)) }
 

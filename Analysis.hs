@@ -103,18 +103,11 @@ getInitKnowMsg ag h = do
   let know = Map.findWithDefault [] ag (S.know h)
   nestKnow know
 
-initProject :: Agent -> Action -> S.Header -> Projection
--- initialize projection by receiving the initial knowledge
-initProject ag ac h = do
-  let proj = project ag ac
-  let ikMsg = getInitKnowMsg ag h
-  Receive ikMsg proj
-
-actionsToProjs :: Action -> S.Header -> [(Agent, Projection)]
+actionsToProjs :: Action -> [(Agent, Projection)]
 -- split actions into corresponding projections
-actionsToProjs ac h = do
+actionsToProjs ac = do
   let agents = H.getActors ac
-  map (\ag -> (ag, (initProject ag ac h))) agents
+  map (\ag -> (ag, (project ag ac))) agents
 
 composeFormula :: Formula Msg -> S.FrameState -> (Formula Recipe)
 -- convert message formula to recipe formula
@@ -310,12 +303,23 @@ injectInitSidTxn :: Process -> Process
 injectInitSidTxn (NChoice m v d r) = (NChoice m v d (injectInitSidTxn r))
 injectInitSidTxn p@(NSend _ _) = (NNew ["int_SID"] (NSend (RPub "int_SID") p))
 
+getWrapName :: Agent -> String
+getWrapName ag = "int_IK_" ++ ag
+
+getExtractName :: Agent -> String
+getExtractName ag = "int_IK_extract_" ++ ag
+
+wrapInitKnow :: Agent -> Recipe -> Recipe
+wrapInitKnow ag r = do
+  let name = getWrapName ag
+  RComp name [r]
+
 getInitKnowTxn :: Agent -> S.Header -> Process
 -- get initial knowledge transaction for agent
 getInitKnowTxn ag h = do
   let roles = getRolesFromKnow ag h
   let ikRecipe = H.msgToRecipe (getInitKnowMsg ag h )
-  nestAgentPick roles h (NSend ikRecipe NNil)
+  nestAgentPick roles h (NSend (wrapInitKnow ag ikRecipe) NNil)
 
 getIntruderKnow :: S.Header -> [Msg]
 -- get intruder knowledge as message
@@ -333,6 +337,10 @@ initConvert :: [(Agent, Projection)] -> S.Header -> S.MState [Process]
 -- initialize the convert function by creating an initial transaction generating int_SID session ID
 initConvert aprs h = do
   let (ip:ips) = map (\(ag, _) -> getInitKnowTxn ag h) aprs
+  let wraps = map (\(ag, _) -> getWrapName ag) aprs
+  let extracts = map (\(ag, _) -> ((getExtractName ag), (getWrapName ag))) aprs
+  c <- S.get
+  S.put c { S.extracts = extracts, S.wraps = wraps }
   (p:ps) <- convert aprs h
   return ((injectInitSidTxn ip):ips ++ (getIntruderKnowTxn h):(NReceive "int_SID" p):ps) 
 
@@ -348,11 +356,16 @@ convert ((ag, pr):aprs) h = do
 initTranslate :: Agent -> Projection -> S.Header -> S.MState Process
 -- initialize a translation of a projection into a process chain
 initTranslate ag pr h = do
-  let know = Map.findWithDefault [] ag (S.know h)
-  let s = S.addInitialFrameState ag h know S.initialFrameState
+  let s = S.addInitialFrameState ag h S.initialFrameState
+  let ikMsg = getInitKnowMsg ag h
+  (x, s1) <- S.registerFresh ikMsg ToDo s
+  (chs, s2) <- analyzeToDo s1
   c <- S.get
   S.put c { S.txnCounter = 0 }
-  translate ag pr s
+  p <- translate ag pr s2
+  let nestedChecks = foldr convertCheck p chs
+  let extractRecipe = RComp (getExtractName ag) [RLabel "IK"]
+  return (NReceive "IK" (NTry x extractRecipe nestedChecks NNil))
 
 translate :: Agent -> Projection -> S.FrameState -> S.MState Process
 -- translate a projection into a process chain
@@ -471,10 +484,17 @@ breakProcess p = do
   let (p', rest) = breakTxn p
   p':(concatMap breakProcess rest)
 
+removePk :: S.Header -> S.Header
+removePk h = do
+  let nSig0 = filter (\(f, _) -> f /= "pk") (S.s0 h)
+  let nSig = filter (\(f, _) -> f /= "pk") (S.sPub h)
+  let nSigP = filter (\(f, _) -> f /= "pk") (S.sPriv h)
+  h { S.s0 = nSig0, S.sPub = nSig, S.sPriv = nSigP }
+
 updateHeaderAndCells :: S.State -> S.Header -> [CellDef] -> (S.Header, [CellDef])
 -- update header and cells with auto-generated public labels and cells
 updateHeaderAndCells c h cells = do
   let newToSig0 = ("int_FRESH":(S.pubLabels c)) ++ (S.hAgs h) ++ (S.dAgs h)
-  let newHeader = S.addToSigma0 newToSig0 h
+  let newHeader = S.addExtractsToAlgebra (S.extracts c) (S.addWrapsToSigma (S.wraps c) (S.addToSigma0 newToSig0 h))
   let newCells = map (\cell -> (cell, Atom "int_SID", Atom "int_FRESH")) (List.nub (S.cells c))
-  (newHeader, newCells ++ cells)
+  ((removePk newHeader), newCells ++ cells)
