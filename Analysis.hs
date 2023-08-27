@@ -235,7 +235,9 @@ analyze l msg@(Comp "inv" (pk:[])) s = do
   let rs = compose pk s
   if rs /= [] then do
     let s1 = S.register msg Done l s
-    return (([CIf (BEq (head rs) (RComp "pubk" [RLabel l]))]), s1)
+    (l1, s2) <- S.registerFresh pk ToDo s1
+    (chs, s3) <- analyzeToDo s2
+    return (([CTry l1 (RComp "pubk" [RLabel l]), CIf (BEq (head rs) (RLabel l1))] ++ chs), s3)
   else
     return ([], s)
 -- default decomposition
